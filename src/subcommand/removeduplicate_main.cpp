@@ -305,6 +305,8 @@ int main_rmvdup(int argc, char *argv[]) {
     }
 
 
+
+
     string sorted_gam_name = get_input_file_name(optind, argc, argv);
     unique_ptr <GAMIndex> gam_index;
     if (!sorted_gam_name.empty()) {
@@ -322,7 +324,6 @@ int main_rmvdup(int argc, char *argv[]) {
     function<void(Alignment & )> fill_hash = [&](const Alignment &aln) {
         int thread_number = omp_get_thread_num();
         fill_hash_memory[thread_number].push_back(name_id(aln));
-//        keys.push_back(name_id(aln));
     };
     get_input_file(sorted_gam_name, [&](istream &in) {
         vg::io::for_each_parallel(in, fill_hash);
@@ -346,9 +347,6 @@ int main_rmvdup(int argc, char *argv[]) {
     }
 
 
-
-
-    int alignment_numbers = keys.size();
     vector<bool> checked(keys.size(), false);
 
     boophf_t *bphf = new boomphf::mphf<string, Custom_string_hasher>(keys.size(), keys, threads, 2.0, false, false);
@@ -405,253 +403,23 @@ int main_rmvdup(int argc, char *argv[]) {
         }
     };
 
-//    vector<unordered_map <string, Alignment>> memory(threads);
-    vector <unordered_set<std::string>> pair1_duplicates_set(threads);
 
-
-    function<void(Alignment & , Alignment & )> pcr_removal_pair_end_double = [&](Alignment &aln, Alignment &aln_pair) {
-
-        int thread_number = omp_get_thread_num();
-
-        if (gam_index.get() != nullptr) {
-            if (!checked[bphf->lookup(name_id(aln))]) {
-                checked[bphf->lookup(name_id(aln))] = true;
-                checked[bphf->lookup(name_id(aln_pair))] = true;
-
-                vector <pair<long long, long long>> intervals_pair1 = make_coalesced_sorted_intervals(aln);
-
-
-                // Set of duplicate alns with the first pair
-//                unordered_set <string> pair1_duplicates_set;
-
-                get_input_file(sorted_gam_name, [&](istream &input_gam) {
-
-                    vg::io::ProtobufIterator<Alignment> gam_cursor(input_gam);
-
-                    // This finds all other alns that share node/nodes with the "aln"
-                    gam_index->find(gam_cursor, intervals_pair1, [&](const Alignment &share_aln) {
-
-                        if (check_duplicate(aln, share_aln)) {
-                            pair1_duplicates_set[thread_number].insert(
-                                    share_aln.has_fragment_prev() ? share_aln.fragment_prev().name()
-                                                                  : share_aln.fragment_next().name());
-                        }
-
-
-                    });
-
-
-                });
-
-
-                vector <pair<long long, long long>> intervals_pair2 = make_coalesced_sorted_intervals(aln_pair);
-                get_input_file(sorted_gam_name, [&](istream &input_gam) {
-                    vg::io::ProtobufIterator<Alignment> gam_cursor(input_gam);
-
-                    gam_index->find(gam_cursor, intervals_pair2, [&](const Alignment &share_aln) {
-                        if (check_duplicate(aln_pair, share_aln)) {
-
-                            // The pair is in the set
-                            if (pair1_duplicates_set[thread_number].find(share_aln.name()) !=
-                                pair1_duplicates_set[thread_number].end()) {
-
-
-                                // This means we find pairs that are duplicates with the main pairs so we check them for being duplicate
-
-                                // we add /1 to the prev one because we are naming the other pair
-                                string pair_name_id = share_aln.has_fragment_prev() ?
-                                                      share_aln.fragment_prev().name() + "/1" :
-                                                      share_aln.fragment_next().name() + "/2";
-//                                        cout << "share aln " << name_id(share_aln) << endl;
-//                                        cout << "pair share aln " << pair_name_id << endl;
-                                checked[bphf->lookup(name_id(share_aln))] = true;
-                                checked[bphf->lookup(pair_name_id)] = true;
-
-                                if (print_duplicates) {
-#pragma omp critical (cerr)
-                                    if (output_t) {
-                                        cout << "Pair 1" << share_aln.sequence() << endl;
-                                        cout << "Pair 2" << aln.sequence() << endl;
-                                    } else {
-                                        emitter->write(std::move(const_cast<Alignment &>(share_aln)));
-                                        emitter->write(std::move(const_cast<Alignment &>(aln)));
-                                    }
-
-                                }
-
-
-                            }
-
-
-                        }
-
-                    });
-
-                });
-
-#pragma omp critical (cerr)
-//                        cout << name_id(aln) << endl;
-//                checked[bphf->lookup(name_id(aln))] = true;
-//                checked[bphf->lookup(name_id(aln_pair))] = true;
-                if (!print_duplicates) {
-                    if (output_t)
-                        cout << "Pair1 " << aln.sequence() << "\t" << aln.name() << "Pair2 "
-                             << aln_pair.sequence() << "\t" << aln_pair.name() << endl;
-                    else {
-                        emitter->write(std::move(aln));
-                        emitter->write(std::move(aln_pair));
-                    }
-
-                }
-
-
-            }
-
-        }
-
-
-    };
-
-
-//
-//    // This is a memory for finding pairs. The name of the aln as the key and the aln as the value
-//    vector<unordered_map <string, Alignment>> memory(threads);
-////    unordered_map <string, Alignment> temp_memory;
-//    // This is the function that works on pair_end data
-//    function<void(Alignment & )> pcr_removal_pair_end = [&](Alignment &aln) {
-//        int thread_number = omp_get_thread_num();
-////        unordered_map<string, Alignment>().swap(memory[thread_number]);
-//
-//
-//        if (gam_index.get() != nullptr) {
-//            // If this alignment is not already checked for being duplicate
-//            if (!checked[bphf->lookup(name_id(aln))]) {
-//                // This is when the read has a pair
-//                if (aln.has_fragment_prev() || aln.has_fragment_next()) {
-//                    string pair_name = aln.has_fragment_prev() ? aln.fragment_prev().name()
-//                                                               : aln.fragment_next().name();
-//                    if (memory[thread_number].find(aln.name()) == memory[thread_number].end()) {
-//                        // This means the we don't have the pair yet
-//                        memory[thread_number][pair_name] = aln;
-//                    } else {
-//                        // We have the pair of our alignment
-//                        Alignment aln_pair = memory[thread_number][aln.name()];
-//                        memory[thread_number].erase(aln.name());
-//
-//                        // We have to find all the alignments that share nodes with both pairs and find if they are both end of a pair
-//                        // TODO: For now I check the equality of pairs using check_duplicate function which check
-//                        //  if they end the same and if they have at least one more same base. This could gets better.
-//
-//                        vector <pair<long long, long long>> intervals_pair1 = make_coalesced_sorted_intervals(aln);
-//
-//
-//                        // Set of duplicate alns with the first pair
-//                        unordered_set <string> pair1_duplicates_set;
-//                        get_input_file(sorted_gam_name, [&](istream &input_gam) {
-//
-//                            vg::io::ProtobufIterator<Alignment> gam_cursor(input_gam);
-//
-//                            // This finds all other alns that share node/nodes with the "aln"
-//                            gam_index->find(gam_cursor, intervals_pair1, [&](const Alignment &share_aln) {
-//                                if (check_duplicate(aln, share_aln)) {
-//                                    pair1_duplicates_set.insert(
-//                                            share_aln.has_fragment_prev() ? share_aln.fragment_prev().name()
-//                                                                          : share_aln.fragment_next().name());
-//                                }
-//
-//                            });
-//
-//
-//                        });
-//
-//                        vector <pair<long long, long long>> intervals_pair2 = make_coalesced_sorted_intervals(aln_pair);
-//                        get_input_file(sorted_gam_name, [&](istream &input_gam) {
-//                            vg::io::ProtobufIterator<Alignment> gam_cursor(input_gam);
-//
-//                            gam_index->find(gam_cursor, intervals_pair2, [&](const Alignment &share_aln) {
-//                                if (check_duplicate(aln_pair, share_aln)) {
-//
-//                                    // The pair is in the set
-//                                    if (pair1_duplicates_set.find(share_aln.name()) != pair1_duplicates_set.end()) {
-//
-//
-//                                        // This means we find pairs that are duplicates with the main pairs so we check them for being duplicate
-//
-//                                        // we add /1 to the prev one because we are naming the other pair
-//                                        string pair_name_id = share_aln.has_fragment_prev() ?
-//                                                              share_aln.fragment_prev().name() + "/1" :
-//                                                              share_aln.fragment_next().name() + "/2";
-////                                        cout << "share aln " << name_id(share_aln) << endl;
-////                                        cout << "pair share aln " << pair_name_id << endl;
-//                                        // TODO: WE dont get here!
-//                                        checked[bphf->lookup(name_id(share_aln))] = true;
-//                                        checked[bphf->lookup(pair_name_id)] = true;
-//
-//                                        // TODO: for now I am just printing the second pair because I am not saving all
-//                                        //  the alignments for the first pair. I am just saving the name for efficient mem usage.
-//                                        if (print_duplicates) {
-//#pragma omp critical (cerr)
-//                                            if (output_t)
-//                                                cout << "End Pair" << share_aln.sequence() << endl;
-//                                            else
-//                                                emitter->write(std::move(const_cast<Alignment &>(share_aln)));
-//                                        }
-//
-//
-//                                    }
-//
-//
-//                                }
-//
-//                            });
-//
-//                        });
-//
-//                        // Writing the non-duplicate PCRs to the file
-//#pragma omp critical (cerr)
-////                        cout << name_id(aln) << endl;
-//                        checked[bphf->lookup(name_id(aln))] = true;
-//                        checked[bphf->lookup(name_id(aln_pair))] = true;
-//                        if (!print_duplicates) {
-//                            if (output_t)
-//                                cout << "Pair1 " << aln.sequence() << "\t" << aln.name() << "Pair2 "
-//                                     << aln_pair.sequence() << "\t" << aln_pair.name() << endl;
-//                            else {
-//                                emitter->write(std::move(aln));
-//                                emitter->write(std::move(aln_pair));
-//                            }
-//
-//                        }
-//
-//
-//                    }
-//
-//                } else { // When the read is not a pair_end read
-//                    pcr_removal(aln);
-//
-//                }
-//
-//
-//            }
-//
-//        }
-//
-//
-//    };
 
     vector <vector<Alignment>> batch(get_thread_count());
     int batch_size = 64;
-    int processed_alignments = 0;
-//    bool is_last = false;
     function<void(Alignment & , Alignment &, bool)> batch_pair_removal = [&](Alignment &aln, Alignment &aln_pair, bool is_last) {
+        /// This function handle the alignments in batches. It calls all the .find functions needed in one .find function
 
         int thread_number = omp_get_thread_num();
         if ((batch[thread_number].size() == batch_size - 2) || is_last) {
+
+            // is_last is for handling the last batch, which size could be less than the batch_size
             if (!is_last) {
                 batch[thread_number].push_back(aln);
                 batch[thread_number].push_back(aln_pair);
             } else {
                 for (size_t i = 0; i < batch.size(); i++) {
+                    // find the thread that still has more alignments in the batch
                     if (batch[i].size() > 0) {
                         thread_number = i;
                         break;
@@ -716,12 +484,10 @@ int main_rmvdup(int argc, char *argv[]) {
 
                 if (!checked[bphf->lookup(name_id(pair1))]) {
 
-
-
-                    // Set of duplicate alns with the first pair
-//                unordered_set <string> pair1_duplicates_set;
                     unordered_set <string> pair1_duplicates_set;
 
+
+                    // This is an in-mem version of .find function
                     for (const Mapping mapping: pair1.path().mapping()) {
                         vector<int> find_index_pair1_list = find_results[mapping.position().node_id()];
                         for (int find_index_pair1: find_index_pair1_list) {
@@ -744,17 +510,12 @@ int main_rmvdup(int argc, char *argv[]) {
                                 // The pair is in the set
                                 if (pair1_duplicates_set.find(share_aln.name()) !=
                                     pair1_duplicates_set.end()) {
-
-
-
                                     // This means we find pairs that are duplicates with the main pairs so we check them for being duplicate
 
                                     // we add /1 to the prev one because we are naming the other pair
                                     string pair_name_id = share_aln.has_fragment_prev() ?
                                                           share_aln.fragment_prev().name() + "/1" :
                                                           share_aln.fragment_next().name() + "/2";
-//                                        cout << "share aln " << name_id(share_aln) << endl;
-//                                        cout << "pair share aln " << pair_name_id << endl;
                                     checked[bphf->lookup(name_id(share_aln))] = true;
                                     checked[bphf->lookup(pair_name_id)] = true;
 
@@ -831,24 +592,12 @@ int main_rmvdup(int argc, char *argv[]) {
             });
 
 
-//            is_last = true;
             Alignment a, b;
             batch_pair_removal(a, b, true);
         }
 
 
     }
-//
-//    function<void(Alignment &, Alignment &)> batch_pair_two_var = [&](Alignment &o1, Alignment &o2) {
-//        batch_pair_removal(o1, o2, false);
-//    };
-//    if (gam_index.get() != nullptr) {
-//        get_input_file(sorted_gam_name, [&](istream &in) {
-////            vg::io::for_each(in, pcr_removal);
-//            vg::io::for_each_parallel_shuffled_double(in, batch_pair_two_var);
-//
-//        });
-//    }
 
 
 
