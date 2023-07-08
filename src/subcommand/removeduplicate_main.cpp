@@ -437,6 +437,9 @@ int main_rmvdup(int argc, char *argv[]) {
 //            batch[thread_number].push_back(aln_pair);
 
 
+
+
+
             vector <pair<long long, long long>> intervals_batch = make_coalesced_sorted_intervals_batch(
                     batch[thread_number]);
 
