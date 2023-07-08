@@ -24,6 +24,7 @@
 #include <BooPHF.h>
 #include <bitset>
 #include "../hash_map.hpp"
+#include "../hts_alignment_emitter.hpp"
 
 using namespace std;
 using namespace vg;
@@ -305,8 +306,6 @@ int main_rmvdup(int argc, char *argv[]) {
     }
 
 
-
-
     string sorted_gam_name = get_input_file_name(optind, argc, argv);
     unique_ptr <GAMIndex> gam_index;
     if (!sorted_gam_name.empty()) {
@@ -318,8 +317,8 @@ int main_rmvdup(int argc, char *argv[]) {
         });
     }
 
-    vector<vector<string>> fill_hash_memory(get_thread_count());
-    vector<string> keys;
+    vector <vector<string>> fill_hash_memory(get_thread_count());
+    vector <string> keys;
 
     function<void(Alignment & )> fill_hash = [&](const Alignment &aln) {
         int thread_number = omp_get_thread_num();
@@ -334,7 +333,7 @@ int main_rmvdup(int argc, char *argv[]) {
     size_t totalSize = 0;
 
     // Calculate the total size of all vectors
-    for (const auto& vec : fill_hash_memory) {
+    for (const auto &vec: fill_hash_memory) {
         totalSize += fill_hash_memory.size();
     }
 
@@ -342,7 +341,7 @@ int main_rmvdup(int argc, char *argv[]) {
     keys.reserve(totalSize);
 
     // Merge the vectors
-    for (const auto& vec : fill_hash_memory) {
+    for (const auto &vec: fill_hash_memory) {
         keys.insert(keys.end(), vec.begin(), vec.end());
     }
 
@@ -351,8 +350,14 @@ int main_rmvdup(int argc, char *argv[]) {
 
     boophf_t *bphf = new boomphf::mphf<string, Custom_string_hasher>(keys.size(), keys, threads, 2.0, false, false);
 
-    std::unique_ptr<vg::io::ProtobufEmitter<Alignment>> emitter;
-    emitter = std::unique_ptr<vg::io::ProtobufEmitter<Alignment>>(new vg::io::ProtobufEmitter<Alignment>(cout));
+//    std::unique_ptr<vg::io::ProtobufEmitter<Alignment>> emitter;
+    vector <tuple<path_handle_t, size_t, size_t>> paths;
+    PathPositionHandleGraph *path_position_graph = nullptr;
+//    paths = get_sequence_dictionary("", {}, *path_position_graph);
+    unique_ptr <AlignmentEmitter> alignment_emitter;
+    alignment_emitter = get_alignment_emitter("-", "GAM",
+                                              paths, get_thread_count());
+//    emitter = std::unique_ptr<vg::io::ProtobufEmitter<Alignment>>(new vg::io::ProtobufEmitter<Alignment>(cout));
     function<void(Alignment & )> pcr_removal = [&](Alignment &aln) {
         if (gam_index.get() != nullptr) {
             // I mark all the reads that have to get deleted as duplicates. This means one read from each duplicate set remains unmarked.
@@ -370,11 +375,11 @@ int main_rmvdup(int argc, char *argv[]) {
                             if (name_id(aln) != name_id(share_aln)) {
                                 if (check_duplicate(aln, share_aln)) {
                                     if (print_duplicates) {
-#pragma omp critical (cerr)
-                                        if (output_t)
-                                            cout << share_aln.sequence() << endl;
-                                        else
-                                            emitter->write(std::move(const_cast<Alignment &>(share_aln)));
+//#pragma omp critical (cerr)           int a = 0;
+//                                        if (output_t)
+//                                            cout << share_aln.sequence() << endl;
+//                                        else
+//                                            emitter->write(std::move(const_cast<Alignment &>(share_aln)));
                                     }
                                     checked[bphf->lookup(name_id(share_aln))] = true;
                                 }
@@ -390,10 +395,10 @@ int main_rmvdup(int argc, char *argv[]) {
 #pragma omp critical (cerr)
                     checked[bphf->lookup(name_id(aln))] = true;
                     if (!print_duplicates) {
-                        if (output_t)
-                            cout << aln.sequence() << "\t" << aln.name() << endl;
-                        else
-                            emitter->write(std::move(aln));
+//                        if (output_t)
+//                            cout << aln.sequence() << "\t" << aln.name() << endl;
+//                        else
+//                            emitter->write(std::move(aln));
                     }
                 }
 
@@ -404,10 +409,11 @@ int main_rmvdup(int argc, char *argv[]) {
     };
 
 
-
     vector <vector<Alignment>> batch(get_thread_count());
     int batch_size = 64;
-    function<void(Alignment & , Alignment &, bool)> batch_pair_removal = [&](Alignment &aln, Alignment &aln_pair, bool is_last) {
+    int tmp = 0;
+    function<void(Alignment & , Alignment & , bool)> batch_pair_removal = [&](Alignment &aln, Alignment &aln_pair,
+                                                                              bool is_last) {
         /// This function handle the alignments in batches. It calls all the .find functions needed in one .find function
 
         int thread_number = omp_get_thread_num();
@@ -418,17 +424,17 @@ int main_rmvdup(int argc, char *argv[]) {
                 batch[thread_number].push_back(aln);
                 batch[thread_number].push_back(aln_pair);
             } else {
-                for (size_t i = 0; i < batch.size(); i++) {
+                for (size_t ind = 0; ind < batch.size(); ++ind) {
                     // find the thread that still has more alignments in the batch
-                    if (batch[i].size() > 0) {
-                        thread_number = i;
+                    if (batch[ind].size() > 0) {
+                        thread_number = ind;
                         break;
                     }
                 }
 
             }
-                batch[thread_number].push_back(aln);
-                batch[thread_number].push_back(aln_pair);
+//            batch[thread_number].push_back(aln);
+//            batch[thread_number].push_back(aln_pair);
 
 
             vector <pair<long long, long long>> intervals_batch = make_coalesced_sorted_intervals_batch(
@@ -466,6 +472,7 @@ int main_rmvdup(int argc, char *argv[]) {
             }
 
 
+//            cerr << node_ids.size() << "____" << find_alignments.size() << " " << thread_number << endl;
             // this function remove duplicate node ids and keep one of them
             remove_rep_elements(node_ids);
 
@@ -473,8 +480,13 @@ int main_rmvdup(int argc, char *argv[]) {
             for (long long ids: node_ids) {
                 find_results[ids] = find_indexes(batch_nodes, ids);
             }
+            if (!intervals_batch.empty()) {
+                cerr << node_ids.size() << "____" << find_alignments.size() << "____________" << find_results.size()
+                     << " " << thread_number << "First " << intervals_batch.front().first << "last "
+                     << intervals_batch.back().second << "size " << intervals_batch.size() << endl;
 
 
+            }
             for (int i = 0; i < batch[thread_number].size(); i += 2) {
                 // handle two pair alignments using the in-mem finder we have
                 Alignment pair1, pair2;
@@ -483,6 +495,8 @@ int main_rmvdup(int argc, char *argv[]) {
 
 
                 if (!checked[bphf->lookup(name_id(pair1))]) {
+                    checked[bphf->lookup(name_id(pair1))] = true;
+                    checked[bphf->lookup(name_id(pair2))] = true;
 
                     unordered_set <string> pair1_duplicates_set;
 
@@ -492,32 +506,41 @@ int main_rmvdup(int argc, char *argv[]) {
                         vector<int> find_index_pair1_list = find_results[mapping.position().node_id()];
                         for (int find_index_pair1: find_index_pair1_list) {
                             Alignment share_aln = find_alignments[find_index_pair1];
-                            if (check_duplicate(pair1, share_aln)) {
-                                pair1_duplicates_set.insert(
-                                        share_aln.has_fragment_prev() ? share_aln.fragment_prev().name()
-                                                                      : share_aln.fragment_next().name());
+                            if (!checked[bphf->lookup(name_id(share_aln))]) {
+                                if (check_duplicate(pair1, share_aln)) {
+                                    pair1_duplicates_set.insert(
+                                            share_aln.has_fragment_prev() ? share_aln.fragment_prev().name()
+                                                                          : share_aln.fragment_next().name());
+                                }
                             }
                         }
                     }
 
+//                    cerr << pair1_duplicates_set.size() << endl;
 
-                    for (const Mapping mapping: pair2.path().mapping()) {
-                        vector<int> find_index_pair2_list = find_results[mapping.position().node_id()];
-                        for (int find_index_pair2: find_index_pair2_list) {
-                            Alignment share_aln = find_alignments[find_index_pair2];
-                            if (check_duplicate(pair2, share_aln)) {
 
-                                // The pair is in the set
-                                if (pair1_duplicates_set.find(share_aln.name()) !=
-                                    pair1_duplicates_set.end()) {
-                                    // This means we find pairs that are duplicates with the main pairs so we check them for being duplicate
+                    if (pair1_duplicates_set.size() != 1) {
 
-                                    // we add /1 to the prev one because we are naming the other pair
-                                    string pair_name_id = share_aln.has_fragment_prev() ?
-                                                          share_aln.fragment_prev().name() + "/1" :
-                                                          share_aln.fragment_next().name() + "/2";
-                                    checked[bphf->lookup(name_id(share_aln))] = true;
-                                    checked[bphf->lookup(pair_name_id)] = true;
+                        for (const Mapping mapping: pair2.path().mapping()) {
+                            vector<int> find_index_pair2_list = find_results[mapping.position().node_id()];
+                            for (int find_index_pair2: find_index_pair2_list) {
+                                Alignment share_aln = find_alignments[find_index_pair2];
+
+                                if (!checked[bphf->lookup(name_id(share_aln))]) {
+
+                                    if (check_duplicate(pair2, share_aln)) {
+
+                                        // The pair is in the set
+                                        if (pair1_duplicates_set.find(share_aln.name()) !=
+                                            pair1_duplicates_set.end()) {
+                                            // This means we find pairs that are duplicates with the main pairs so we check them for being duplicate
+
+                                            // we add /1 to the prev one because we are naming the other pair
+                                            string pair_name_id = share_aln.has_fragment_prev() ?
+                                                                  share_aln.fragment_prev().name() + "/1" :
+                                                                  share_aln.fragment_next().name() + "/2";
+                                            checked[bphf->lookup(name_id(share_aln))] = true;
+                                            checked[bphf->lookup(pair_name_id)] = true;
 
 //                                    if (print_duplicates) {
 //#pragma omp critical (cerr)
@@ -532,27 +555,34 @@ int main_rmvdup(int argc, char *argv[]) {
 //                                    }
 
 
+                                        }
+
+
+                                    }
                                 }
 
 
                             }
-
-
                         }
                     }
 
 
-#pragma omp critical (cerr)
 //                        cout << name_id(aln) << endl;
                     checked[bphf->lookup(name_id(pair1))] = true;
                     checked[bphf->lookup(name_id(pair2))] = true;
                     if (!print_duplicates) {
-                        if (output_t)
+                        if (output_t) {
+//#pragma omp critical (cerr)
                             cout << "Pair1 " << aln.sequence() << "\t" << pair1.name() << "Pair2 "
                                  << aln_pair.sequence() << "\t" << pair2.name() << endl;
-                        else {
-                            emitter->write(std::move(pair1));
-                            emitter->write(std::move(pair2));
+                        } else {
+//                            cerr << "we reach here" << name_id(pair1) << " " << thread_number << endl;
+
+                            // TODO: can change the emit from pairs to batches and check the speed
+                            vector <Alignment> output = {pair1, pair2};
+                            alignment_emitter->emit_singles(std::move(output));
+//                            emitter->write(std::move(pair1));
+//                            emitter->write(std::move(pair2));
                         }
 
                     }
@@ -562,7 +592,11 @@ int main_rmvdup(int argc, char *argv[]) {
 
 
             }
-            
+
+
+
+//            cerr << "have to clear batch " << endl;
+            cerr << ++tmp << " " << thread_number << endl;
             // clear the batch of this thread to use it again with another batch
             batch[thread_number].clear();
         } else {
@@ -574,12 +608,12 @@ int main_rmvdup(int argc, char *argv[]) {
     };
 
 
-        function<void(Alignment &, Alignment &)> batch_pair_two_var = [&](Alignment &o1, Alignment &o2) {
+    function<void(Alignment & , Alignment & )> batch_pair_two_var = [&](Alignment &o1, Alignment &o2) {
         batch_pair_removal(o1, o2, false);
-        };
+    };
     if (gam_index.get() != nullptr) {
 
-        if (single_ended){
+        if (single_ended) {
 
             get_input_file(sorted_gam_name, [&](istream &in) {
                 vg::io::for_each_parallel(in, pcr_removal);
@@ -592,13 +626,12 @@ int main_rmvdup(int argc, char *argv[]) {
             });
 
 
-            Alignment a, b;
-            batch_pair_removal(a, b, true);
+//            Alignment a, b;
+//            batch_pair_removal(a, b, true);
         }
 
 
     }
-
 
 
     return 0;
