@@ -42,6 +42,9 @@ public:
          SnarlDistanceIndex* distance_index,
          const PathPositionHandleGraph* path_graph = nullptr);
 
+    using AlignerClient::set_alignment_scores;
+    virtual void set_alignment_scores(const int8_t* score_matrix, int8_t gap_open, int8_t gap_extend, int8_t full_length_bonus);
+
     /**
      * Map the given read, and send output to the given AlignmentEmitter. May be run from any thread.
      * TODO: Can't be const because the clusterer's cluster_seeds isn't const.
@@ -241,6 +244,9 @@ public:
     /// How many chaining sources should we make sure to consider regardless of distance?
     static constexpr size_t default_min_lookback_items = 1;
     size_t min_lookback_items = default_min_lookback_items;
+    /// How many chaining sources should we allow ourselves to consider ever?
+    static constexpr size_t default_lookback_item_hard_cap = 15;
+    size_t lookback_item_hard_cap = lookback_item_hard_cap;
     /// How many bases should we try to look back initially when chaining?
     static constexpr size_t default_initial_lookback_threshold = 10;
     size_t initial_lookback_threshold = default_initial_lookback_threshold;
@@ -271,6 +277,15 @@ public:
     /// process anything with a score smaller than this.
     static constexpr int default_chain_min_score = 100;
     int chain_min_score = default_chain_min_score;
+    
+    /// How long of a DP can we do before GSSW crashes due to 16-bit score
+    /// overflow?
+    static constexpr int MAX_DP_LENGTH = 30000;
+    
+    /// How many DP cells should we be willing to do in GSSW for an end-pinned
+    /// alignment? If we want to do more than this, just leave tail unaligned.
+    static constexpr size_t default_max_dp_cells = 16UL * 1024UL * 1024UL;
+    size_t max_dp_cells = default_max_dp_cells;
     
     /////////////////
     // More shared parameters:
@@ -381,7 +396,7 @@ public:
         size_t agglomeration_start; // What is the start base of the first window this minimizer instance is minimal in?
         size_t agglomeration_length; // What is the length in bp of the region of consecutive windows this minimizer instance is minimal in?
         size_t hits; // How many hits does the minimizer have?
-        const gbwtgraph::hit_type* occs;
+        const typename gbwtgraph::DefaultMinimizerIndex::value_type* occs;
         int32_t length; // How long is the minimizer (index's k)
         int32_t candidates_per_window; // How many minimizers compete to be the best (index's w), or 1 for syncmers.  
         double score; // Scores as 1 + ln(hard_hit_cap) - ln(hits).
@@ -429,13 +444,13 @@ protected:
     double distance_to_annotation(int64_t distance) const;
     
     /// How should we initialize chain info when it's not stored in the minimizer index?
-    inline static gbwtgraph::payload_type no_chain_info() {
+    inline static gbwtgraph::Payload no_chain_info() {
         return MIPayload::NO_CODE;  
     } 
     
     /// How do we convert chain info to an actual seed of the type we are using?
     /// Also needs to know the hit position, and the minimizer number.
-    inline static Seed chain_info_to_seed(const pos_t& hit, size_t minimizer, const gbwtgraph::payload_type& chain_info) {
+    inline static Seed chain_info_to_seed(const pos_t& hit, size_t minimizer, const gbwtgraph::Payload& chain_info) {
         return { hit, minimizer, chain_info };
     }
     
@@ -459,7 +474,10 @@ protected:
     const gbwtgraph::GBWTGraph& gbwt_graph;
     
     /// We have a gapless extender to extend seed hits in haplotype space.
-    GaplessExtender extender;
+    /// Because this needs a reference to an Aligner, and because changing the
+    /// scoring parameters deletes all the alignmers, we need to keep this
+    /// somewhere we can clear out.
+    std::unique_ptr<GaplessExtender> extender;
     
     /// We have a clusterer
     SnarlDistanceIndexClusterer clusterer;
@@ -679,12 +697,12 @@ protected:
      * global-align the sequence of the given Alignment to it. Populate the
      * Alignment's path and score.
      *
-     * Finds an alignment against a graph path if it is <= max_path_length.
+     * Finds an alignment against a graph path if it is <= max_path_length, and uses <= max_dp_cells GSSW cells.
      *
      * If one of the anchor positions is empty, does pinned alighnment against
      * the other position.
      */
-    static void align_sequence_between(const pos_t& left_anchor, const pos_t& right_anchor, size_t max_path_length, const HandleGraph* graph, const GSSWAligner* aligner, Alignment& alignment);
+    static void align_sequence_between(const pos_t& left_anchor, const pos_t& right_anchor, size_t max_path_length, const HandleGraph* graph, const GSSWAligner* aligner, Alignment& alignment, size_t max_dp_cells = std::numeric_limits<size_t>::max());
     
     /**
      * Set pair partner references for paired mapping results.
@@ -776,6 +794,9 @@ protected:
      * of the first minimizer with an agglomeration in the interval and top is
      * the index of the last minimizer with an agglomeration in the interval
      * (exclusive).
+     *
+     * minimizer_indices must be sorted by agglomeration end, and then by
+     * agglomeration start, so they can be decomposed into nice rectangles.
      *
      * Note that bottom and top are offsets into minimizer_indices, **NOT**
      * minimizers itself. Only contiguous ranges in minimizer_indices actually

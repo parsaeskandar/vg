@@ -25,6 +25,9 @@ void help_clip(char** argv) {
        << "    -r, --snarls FILE         Snarls from vg snarls (recomputed if not given unless -d and -P used)." << endl
        << "depth clipping options: " << endl
        << "    -d, --depth N             Clip out nodes and edges with path depth below N" << endl
+       << "stub clipping options:" << endl
+       << "    -s, --stubs               Clip out all stubs (nodes with degree-0 sides that aren't on reference)" << endl
+       << "    -S, --stubbify-paths      Clip out all edges necessary to ensure selected reference paths have exactly two stubs" << endl
        << "snarl complexity clipping options: [default mode]" << endl
        << "    -n, --max-nodes N         Only clip out snarls with > N nodes" << endl
        << "    -e, --max-edges N         Only clip out snarls with > N edges" << endl
@@ -55,6 +58,8 @@ int main_clip(int argc, char** argv) {
     int64_t min_fragment_len = 0;
     bool verbose = false;
     bool depth_clipping = false;
+    bool stub_clipping = false;
+    bool stubbify_reference = false;
 
     size_t max_nodes = 0;
     size_t max_edges = 0;
@@ -82,6 +87,8 @@ int main_clip(int argc, char** argv) {
             {"help", no_argument, 0, 'h'},
             {"bed", required_argument, 0, 'b'},
             {"depth", required_argument, 0, 'd'},
+            {"stubs", no_argument, 0, 's'},
+            {"stubbify-paths", no_argument, 0, 'S'},
             {"max-nodes", required_argument, 0, 'n'},
             {"max-edges", required_argument, 0, 'e'},
             {"max-nodes-shallow", required_argument, 0, 'N'},
@@ -101,7 +108,7 @@ int main_clip(int argc, char** argv) {
 
         };
         int option_index = 0;
-        c = getopt_long (argc, argv, "hb:d:n:e:N:E:a:l:L:D:c:P:r:m:Bt:v",
+        c = getopt_long (argc, argv, "hb:d:sSn:e:N:E:a:l:L:D:c:P:r:m:Bt:v",
                 long_options, &option_index);
 
         // Detect the end of the options.
@@ -121,6 +128,12 @@ int main_clip(int argc, char** argv) {
         case 'd':
             min_depth = parse<size_t>(optarg);
             break;
+        case 's':
+            stub_clipping = true;
+            break;
+        case 'S':
+            stubbify_reference = true;
+            break;            
         case 'n':
             max_nodes = parse<size_t>(optarg);
             snarl_option = true;
@@ -190,8 +203,8 @@ int main_clip(int argc, char** argv) {
         return 1;
     }
 
-    if ((min_depth >= 0 || max_deletion >= 0) && (snarl_option || out_bed)) {
-        cerr << "error:[vg-clip] bed output (-B) and snarl complexity options (-n, -e, -N, -E, -a, -l, -L) cannot be used with -d or -D" << endl;
+    if ((min_depth >= 0 || max_deletion >= 0 || stub_clipping || stubbify_reference) && (snarl_option || out_bed)) {
+        cerr << "error:[vg-clip] bed output (-B) and snarl complexity options (-n, -e, -N, -E, -a, -l, -L) cannot be used with -d, -D, -s or -S" << endl;
         return 1;
     }
 
@@ -201,8 +214,19 @@ int main_clip(int argc, char** argv) {
         return 1;
     }
 
+    // ditto about combining
+    if ((stub_clipping || stubbify_reference) && (min_depth >= 0 || max_deletion >= 0)) {
+        cerr << "error:[vg-clip] -s and -S cannot (yet?) be used with -d or -D" << endl;
+        return 1;
+    }
+    
     if (context_steps >= 0 && max_deletion < 0) {
         cerr << "error:[vg-clip] -c can only be used with -D" << endl;
+        return 1;
+    }
+
+    if (stubbify_reference && ref_prefixes.empty()) {
+        cerr << "error:[vg-clip] -S can only be used with -P" << endl;
         return 1;
     }
 
@@ -222,11 +246,11 @@ int main_clip(int argc, char** argv) {
     unique_ptr<SnarlManager> snarl_manager;
     vector<Region> bed_regions;
 
-    // need the path positions unless we're doing depth or deletion clipping without regions
-    bool need_pp = !(bed_path.empty() && (min_depth >= 0 || max_deletion >= 0));
+    // need the path positions unless we're doing depth, deletion or stub clipping without regions
+    bool need_pp = !(bed_path.empty() && (min_depth >= 0 || max_deletion >= 0 || stub_clipping));
 
     // need snarls if input regions are provided, or doing snarl based clipping
-    bool need_snarls = !bed_path.empty() || (min_depth < 0 && max_deletion < 0);
+    bool need_snarls = !bed_path.empty() || (min_depth < 0 && max_deletion < 0 && !stub_clipping);
 
     if (need_pp) {
         pp_graph = overlay_helper.apply(graph.get());
@@ -324,12 +348,28 @@ int main_clip(int argc, char** argv) {
     } else if (max_deletion >= 0) {
         // run the deletion edge clipping on the whole graph
         clip_deletion_edges(graph.get(), max_deletion, context_steps, ref_prefixes, min_fragment_len, verbose);
-    } else {
+    } else if (stub_clipping || stubbify_reference) {
+        // run the stub clipping
+        if (bed_path.empty()) {            
+            // do the whole graph
+            if (stubbify_reference) {
+                // important that this is done first, as it can actually create non-reference stubs that'd need removal below
+                stubbify_ref_paths(graph.get(), ref_prefixes, min_fragment_len, verbose);
+            }
+            if (stub_clipping) {
+                clip_stubs(graph.get(), ref_prefixes, min_fragment_len, verbose);
+            }
+        } else {
+            assert(stub_clipping && !stubbify_reference);
+            // do the contained snarls
+            clip_contained_stubs(graph.get(), pp_graph, bed_regions, *snarl_manager, false, min_fragment_len, verbose);
+        }        
+    }else {
         // run the alt-allele clipping
         clip_contained_snarls(graph.get(), pp_graph, bed_regions, *snarl_manager, false, min_fragment_len,
                               max_nodes, max_edges, max_nodes_shallow, max_edges_shallow, max_avg_degree, max_reflen_prop, max_reflen, out_bed, verbose);
     }
-        
+
     // write the graph
     if (!out_bed) {
         vg::io::save_handle_graph(graph.get(), std::cout);

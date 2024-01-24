@@ -5,7 +5,7 @@ BASH_TAP_ROOT=../deps/bash-tap
 
 PATH=../bin:$PATH # for vg
 
-plan tests 145
+plan tests 151
 
 
 # Build vg graphs for two chromosomes
@@ -243,6 +243,12 @@ is $? 0 "GBZ construction from VCF"
 cmp x.gbz x2.gbz
 is $? 0 "Identical construction results from GBWT and VCF"
 
+# Build and serialize GBZ from an existing GBWT and GBWTGraph
+vg gbwt -I x.gg -g x3.gbz --gbz-format x.gbwt
+is $? 0 "GBZ construction from GBWTGraph"
+cmp x.gbz x3.gbz
+is $? 0 "Identical construction results from XG and GBWTGraph"
+
 # Extract GBWT from GBZ
 vg gbwt -o extracted.gbwt -Z x.gbz
 is $? 0 "GBWT extraction from GBZ"
@@ -257,7 +263,7 @@ is $? 0 "Identical GBWT indexes"
 cmp x.gg extracted2.gg
 is $? 0 "Identical GBWTGraphs"
 
-rm -f x.gbwt x.gg x.gbz x2.gbz
+rm -f x.gbwt x.gg x.gbz x2.gbz x3.gbz
 rm -f extracted.gbwt extracted2.gbwt extracted2.gg
 
 
@@ -387,7 +393,20 @@ is $? 0 "GBZ GBWT tag extraction works"
 is "$(grep reference_samples tags.tsv | cut -f2 | tr ' ' '\\n' | sort | tr '\\n' ' ')" "GRCh37 GRCh38" "GBWT tags contain the correct reference samples"
 vg gbwt -g gfa2.gbz --gbz-format -Z gfa.gbz --set-tag "reference_samples=GRCh38 CHM13"
 is $? 0 "GBZ GBWT tag modification works"
-is "$(vg paths -M -S GRCh37 -x gfa2.gbz | grep -v "^#" | grep HAPLOTYPE | wc -l)" "1" "Changing reference_samples tag can make a reference a haplotype"
-is "$(vg paths -M -S CHM13 -x gfa2.gbz | grep -v "^#" | grep REFERENCE | wc -l)" "1" "Changing reference_samples tag can make a haplotype a reference"
+is "$(vg paths -M -S GRCh37 -x gfa2.gbz | grep -v "^#" | cut -f2 | grep HAPLOTYPE | wc -l)" "1" "Changing reference_samples tag can make a reference a haplotype"
+is "$(vg paths -M -S CHM13 -x gfa2.gbz | grep -v "^#" | cut -f2 | grep REFERENCE | wc -l)" "1" "Changing reference_samples tag can make a haplotype a reference"
+vg gbwt -g gfa2.gbz --gbz-format -Z gfa.gbz --set-tag "reference_samples=GRCh38#1 CHM13" 2>/dev/null
+is $? 1 "GBZ GBWT tag modification validation works"
+vg gbwt -g gfa3.gbz --gbz-format --set-reference GRCh37 --set-reference CHM13 -Z gfa2.gbz
+is $? 0 "Samples can be direcly set as references"
+is "$(vg gbwt --tags -Z gfa3.gbz | grep reference_samples | cut -f 2)" "GRCh37 CHM13" "Direct reference assignment works"
 
-rm -f gfa.gbz gfa2.gbz tags.tsv
+rm -f gfa.gbz gfa2.gbz gfa3.gbz tags.tsv
+
+# Build a GBZ from a graph with a reference but no haplotype phase number
+vg gbwt -g gfa.gbz --gbz-format -G graphs/gfa_two_part_reference.gfa
+is "$(vg paths -M --reference-paths -x gfa.gbz | grep -v "^#" | cut -f4 | grep NO_HAPLOTYPE | wc -l)" "2" "GBZ can represent reference paths without haplotype numbers"
+
+rm -f gfa.gbz
+
+
