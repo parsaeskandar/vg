@@ -212,9 +212,14 @@ void annotate_with_path_positions(const PathPositionHandleGraph& graph, Alignmen
         for (auto& path : ordered) {
             for (auto& p : positions[path]) {
                 // Add each determined refpos
+
                 Position* refpos = aln.add_refpos();
-                refpos->set_name(graph.get_path_name(path));
-                refpos->set_offset(p.first);
+                subrange_t subrange;
+                string path_name = graph.get_path_name(path);
+                path_name = Paths::strip_subrange(path_name, &subrange);
+                int64_t offset = subrange == PathMetadata::NO_SUBRANGE ? 0 : subrange.first;
+                refpos->set_name(path_name);
+                refpos->set_offset(offset + p.first);
                 refpos->set_is_reverse(p.second);
             }
         }
