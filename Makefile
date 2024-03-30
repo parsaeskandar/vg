@@ -68,11 +68,11 @@ DEPGEN_FLAGS := -MMD -MP
 # even though that's not *always* safe. See
 # <https://stackoverflow.com/a/11532197> and
 # <https://github.com/protocolbuffers/protobuf/issues/12998>
-INCLUDE_FLAGS :=-I$(CWD)/$(INC_DIR) -isystem $(CWD)/$(INC_DIR) -I. -I$(CWD)/$(SRC_DIR) -I$(CWD)/$(UNITTEST_SRC_DIR) -I$(CWD)/$(UNITTEST_SUPPORT_SRC_DIR) -I$(CWD)/$(SUBCOMMAND_SRC_DIR) -I$(CWD)/$(INC_DIR)/dynamic $(shell $(PKG_CONFIG) --cflags $(PKG_CONFIG_DEPS) $(PKG_CONFIG_STATIC_DEPS) | tr ' ' '\n' | awk '!x[$$0]++' | tr '\n' ' ' | sed 's/ -I/ -isystem /g')
+INCLUDE_FLAGS :=-I$(CWD)/$(INC_DIR) -isystem $(CWD)/$(INC_DIR) -I. -I$(CWD)/$(SRC_DIR) -I$(CWD)/$(UNITTEST_SRC_DIR) -I$(CWD)/$(UNITTEST_SUPPORT_SRC_DIR) -I$(CWD)/$(SUBCOMMAND_SRC_DIR) -I$(CWD)/$(INC_DIR)/dynamic -I$(CWD)/$(INC_DIR)/r-index/internal $(shell $(PKG_CONFIG) --cflags $(PKG_CONFIG_DEPS) $(PKG_CONFIG_STATIC_DEPS) | tr ' ' '\n' | awk '!x[$$0]++' | tr '\n' ' ' | sed 's/ -I/ -isystem /g')
 
 # Define libraries to link vg against.
 LD_LIB_DIR_FLAGS := -L$(CWD)/$(LIB_DIR)
-LD_LIB_FLAGS := -lvcflib -ltabixpp -lgssw -lssw -lsublinearLS -lpthread -lncurses -lgcsa2 -lgbwtgraph -lgbwt -lkff -ldivsufsort -ldivsufsort64 -lvcfh -lraptor2 -lpinchesandcacti -l3edgeconnected -lsonlib -lfml -lstructures -lbdsg -lxg -lsdsl -lzstd -lhandlegraph
+LD_LIB_FLAGS := -lvcflib -ltabixpp -lgssw -lssw -lsublinearLS -lpthread -lncurses -lgcsa2 -lgbwtgraph -lgbwt -lkff -ldivsufsort -ldivsufsort64 -lvcfh -lraptor2 -lpinchesandcacti -l3edgeconnected -lsonlib -lfml -lstructures -lbdsg -lxg -lsdsl -lzstd -lhandlegraph -lrindex
 # We omit Boost Program Options for now; we find it in a platform-dependent way.
 # By default it has no suffix
 BOOST_SUFFIX=""
@@ -361,6 +361,8 @@ IPS4O_DIR=deps/ips4o
 BBHASH_DIR=deps/BBHash
 MIO_DIR=deps/mio
 ATOMIC_QUEUE_DIR=deps/atomic_queue
+RINDEX_DIR=deps/r-index/internal
+#PFP_DIR=deps/pfp
 
 # Dependencies that go into libvg's archive
 # These go in libvg but come from dependencies
@@ -398,6 +400,10 @@ LIB_DEPS += $(LIB_DIR)/libvgio.a
 LIB_DEPS += $(LIB_DIR)/libhandlegraph.a
 LIB_DEPS += $(LIB_DIR)/libbdsg.a
 LIB_DEPS += $(LIB_DIR)/libxg.a
+LIB_DEPS += $(LIB_DIR)/librindex.a
+#LIB_DEPS += $(LIB_DIR)/libpfp.a
+#LIB_DEPS += $(LIB_DIR)/libpfp64.a
+
 ifneq ($(shell uname -s),Darwin)
     # On non-Mac (i.e. Linux), where ELF binaries are used, pull in libdw which
     # backward-cpp will use.
@@ -451,6 +457,7 @@ DEPS += $(INC_DIR)/raptor2/raptor2.h
 DEPS += $(INC_DIR)/BooPHF.h
 DEPS += $(INC_DIR)/mio/mmap.hpp
 DEPS += $(INC_DIR)/atomic_queue.h
+DEPS += $(INC_DIR)/r-index/internal/r_index.hpp
 
 .PHONY: clean clean-tests get-deps deps test set-path objs static static-docker docs man .pre-build .check-environment .check-git .no-git
 
@@ -641,6 +648,25 @@ $(LIB_DIR)/libvgio.a: $(LIB_DIR)/libhts.a $(LIB_DIR)/libhandlegraph.a $(LIB_DIR)
 
 $(LIB_DIR)/libhandlegraph.a: $(LIBHANDLEGRAPH_DIR)/src/include/handlegraph/*.hpp $(LIBHANDLEGRAPH_DIR)/src/*.cpp
 	+. ./source_me.sh && cd $(LIBHANDLEGRAPH_DIR) && rm -Rf build CMakeCache.txt CMakeFiles && mkdir build && cd build && CXXFLAGS="$(CXXFLAGS) $(CPPFLAGS)" cmake -DCMAKE_VERBOSE_MAKEFILE=ON -DCMAKE_INSTALL_PREFIX=$(CWD) -DCMAKE_INSTALL_LIBDIR=lib .. && $(MAKE) $(FILTER) && $(MAKE) install
+
+
+$(LIB_DIR)/librindex.a: $(RINDEX_DIR)/*.hpp $(RINDEX_DIR)/../*.cpp
+	+. ./source_me.sh && mkdir $(CWD)/$(INC_DIR)/r-index && cd $(RINDEX_DIR)/.. && rm -Rf build && mkdir build && cd build && cmake .. && $(MAKE) $(FILTER) && ar rs $(CWD)/$(LIB_DIR)/librindex.a CMakeFiles/ri-count.dir/ri-count.cpp.o CMakeFiles/ri-build.dir/ri-build.cpp.o CMakeFiles/ri-locate.dir/ri-locate.cpp.o && cp -r $(CWD)/$(RINDEX_DIR) $(CWD)/$(INC_DIR)/r-index
+
+
+
+#$(LIB_DIR)/libpfp64.a: $(PFP_DIR)/*.cpp $(PFP_DIR)/src/*.cpp $(PFP_DIR)/src/*.cpp.in $(PFP_DIR)/include/*.hpp
+#ifeq ($(shell uname -s),Darwin)
+#	+. ./source_me.sh && cd $(PFP_DIR) && rm -Rf build && mkdir build && cd build && cmake .. && AS_INTEGRATED_ASSEMBLER=1 $(MAKE) $(FILTER) && mv libpfp64.a $(CWD)/$(LIB_DIR)
+#else
+#	+. ./source_me.sh && cd $(PFP_DIR) && rm -Rf build && mkdir build && cd build && cmake .. && $(MAKE) $(FILTER) && mv libpfp64.a $(CWD)/$(LIB_DIR)
+#endif
+#	+ mkdir -p $(INC_DIR)/pfp && cp -r $(PFP_DIR)/include $(CWD)/$(INC_DIR)/pfp/
+#	+ mkdir -p $(INC_DIR)/pfp/include/mio && cp $(PFP_DIR)/build/_deps/mio-src/single_include/mio/mio.hpp $(INC_DIR)/pfp/include/mio
+#	+ cp $(PFP_DIR)/build/_deps/zstr-src/src/*.hpp $(INC_DIR)/pfp/include
+#	+ cp $(PFP_DIR)/build/_deps/smhasher-src/src/MurmurHash3.h $(INC_DIR)/pfp/include
+#	+ cp -r $(PFP_DIR)/build/_deps/spdlog-src/include/* $(INC_DIR)/pfp/include
+
 
 
 # On Linux, libdeflate builds a .so.
