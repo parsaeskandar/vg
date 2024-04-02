@@ -64,7 +64,7 @@ forward_strand_kmers(const std::string& seq, size_t k)
 // return an index of unique kmers and their position in the graph
 // if the kmer is not unique, the special value pos_t (0, 0, 0) TODO: check this
 
-std::unordered_map<gbwtgraph::Key64::value_type, int> keyOccurrences;
+
 template<class KeyType>
 void
 unique_kmers(const GBWTGraph& graph, vg::hash_map<gbwtgraph::Key64::value_type, vg::pos_t>& index, size_t k){
@@ -106,10 +106,72 @@ unique_kmers(const GBWTGraph& graph, vg::hash_map<gbwtgraph::Key64::value_type, 
 
     // TODO: make this parallel if possible
     gbwtgraph::for_each_haplotype_window(graph, k, hash_kmers, false);
-    // print all the keyoccurrences
-    for (auto& i : keyOccurrences) {
-        cout << i.first << " " << i.second << endl;
-    }
+
+}
+
+// parallel?
+template<class KeyType>
+void unique_kmers_parallel(const GBWTGraph& graph, vg::hash_map<gbwtgraph::Key64::value_type, vg::pos_t>& index, size_t k) {
+    typedef KeyType key_type;
+    typedef Kmer<key_type> kmer_type;
+    constexpr size_t KMER_CACHE_SIZE = 1024;  // Adjust cache size as needed
+
+    int threads = omp_get_max_threads();
+    std::vector<std::vector<std::pair<gbwtgraph::Key64::value_type, vg::pos_t>>> cache(threads);
+
+
+    // Lambda to flush the thread-local cache to the shared index
+    auto flush_cache = [&](int thread_number) {
+        auto current_cache = cache[thread_number];
+#pragma omp critical
+        {
+            for (auto entry : current_cache) {
+                if (index.find(entry.first) == index.end()) {
+                    index[entry.first] = entry.second;
+                } else {
+                    // Kmer already present, mark as non-unique
+                    index[entry.first] = vg::pos_t(0, 0, 0);
+                }
+            }
+        }
+
+        cache[thread_number].clear();  // Clear the cache after flushing
+    };
+
+    // Main lambda function to process kmers
+    auto hash_kmers = [&](const std::vector<handle_t>& traversal, const std::string& seq) {
+        int thread_id = omp_get_thread_num();
+        std::vector<kmer_type> kmers = forward_strand_kmers<key_type>(seq, k);
+        auto iter = traversal.begin();
+        size_t node_start = 0;
+
+        for (auto kmer : kmers) {
+            if (kmer.empty()) continue;
+
+            size_t node_length = graph.get_length(*iter);
+            while (node_start + node_length <= kmer.offset) {
+                node_start += node_length;
+                ++iter;
+                node_length = graph.get_length(*iter);
+            }
+            //print the position of the kmer in the graph
+//            cout << "Kmer: " << kmer.key.get_key() << " " << graph.get_id(*iter) << " " << graph.get_is_reverse(*iter) << " " << kmer.offset - node_start << endl;
+            vg::pos_t pos{graph.get_id(*iter), graph.get_is_reverse(*iter), kmer.offset - node_start};
+
+            // Use thread-local cache to reduce contention on the shared index
+            cache[thread_id].emplace_back(kmer.key.get_key(), pos);
+
+            // Flush the cache if it reaches the size limit
+            if (cache[thread_id].size() >= KMER_CACHE_SIZE) {
+                flush_cache(thread_id);
+            }
+        }
+
+    };
+
+    // Parallel execution
+    gbwtgraph::for_each_haplotype_window(graph, k, hash_kmers, true);
+    for(int thread_id = 0; thread_id < threads; thread_id++) { flush_cache(thread_id); }
 
 }
 
@@ -176,7 +238,7 @@ int main_panindexer(int argc, char **argv) {
 
 
     // read the gbz file and store it in the gbz data structure
-    string gbz_file = "/Users/seeskand/Documents/pangenome-index/test_data/x.giraffe.gbz";
+    string gbz_file = "/Users/seeskand/Documents/pangenome-index/test_data/hprc-v1.1-mc-grch38.gbz";
     unique_ptr<gbwtgraph::GBZ> gbz;
     auto input = vg::io::VPKG::try_load_first<gbwtgraph::GBZ, gbwtgraph::GBWTGraph, HandleGraph>(gbz_file);
     gbz = std::move(get<0>(input));
@@ -188,11 +250,9 @@ int main_panindexer(int argc, char **argv) {
 
     typedef gbwtgraph::Key64::value_type kmer_type;
 
-
-
-
     hash_map<kmer_type, vg::pos_t > index;
-    unique_kmers<gbwtgraph::Key64>(gbz->graph, index, 29);
+//    unique_kmers<gbwtgraph::Key64>(gbz->graph, index, 29);
+    unique_kmers_parallel<gbwtgraph::Key64>(gbz->graph, index, 5);
 
     // print the index values that are not the special value pos_t (0, 0, 0)
     for (auto& i : index) {

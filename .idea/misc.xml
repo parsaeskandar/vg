@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CidrRootsConfiguration">
+    <excludeRoots>
+      <file path="$PROJECT_DIR$/bin" />
+      <file path="$PROJECT_DIR$/deps" />
+      <file path="$PROJECT_DIR$/doc" />
+      <file path="$PROJECT_DIR$/lib" />
+      <file path="$PROJECT_DIR$/scripts" />
+      <file path="$PROJECT_DIR$/src/unittest" />
+      <file path="$PROJECT_DIR$/src/unittest/support" />
+      <file path="$PROJECT_DIR$/test" />
+      <file path="$PROJECT_DIR$/vgci" />
+    </excludeRoots>
+  </component>
+  <component name="ExternalStorageConfigurationManager" enabled="true" />
+  <component name="MakefileSettings">
+    <option name="linkedExternalProjectsSettings">
+      <MakefileProjectSettings>
+        <option name="externalProjectPath" value="$PROJECT_DIR$" />
+        <option name="modules">
+          <set>
+            <option value="$PROJECT_DIR$" />
+          </set>
+        </option>
+        <option name="version" value="2" />
+      </MakefileProjectSettings>
+    </option>
+  </component>
+  <component name="MakefileWorkspace" PROJECT_DIR="$PROJECT_DIR$" />
+</project>
