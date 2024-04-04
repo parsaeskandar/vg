@@ -3,6 +3,7 @@
 //
 #include "r-index/internal/r_index.hpp"
 #include "r-index/internal/utils.hpp"
+#include <getopt.h>
 #include <random>
 #include <string>
 #include <vector>
@@ -26,6 +27,15 @@ using namespace vg;
 using namespace vg::subcommand;
 using namespace gbwtgraph;
 
+void help_panindexer(char** argv) {
+    cerr << "usage: " << argv[0] << " panindexer [options]" << endl
+         << endl
+         << "options:" << endl
+         << "    -g, --graph FILE              input graph file" << endl
+         << "    -k, --kmer-length N            length of the kmers in the index [default 29]" << endl
+         << "    -t, --threads N          number of threads to use [1]" << endl;
+}
+
 // This function is a version of canonical_kmers function from gbwtgraph library but in this version we separate the kmer
 // and its reverse complement. So this function returns the sorted vector of kmers
 template<class KeyType>
@@ -33,7 +43,7 @@ std::vector<Kmer<KeyType>>
 forward_strand_kmers(std::string::const_iterator begin, std::string::const_iterator end, size_t k) {
     std::vector<Kmer<KeyType>> result;
     if (k == 0 || k > KeyType::KMER_MAX_LENGTH) {
-        std::cerr << "canonical_kmers(): k must be between 1 and " << KeyType::KMER_MAX_LENGTH << std::endl;
+        std::cerr << "forward_strand_kmers(): k must be between 1 and " << KeyType::KMER_MAX_LENGTH << std::endl;
         return result;
     }
 
@@ -199,6 +209,49 @@ vector<pair<uint64_t, uint64_t>> sort_end_of_seq(vector<uint64_t> &OCC) {
 
 int main_panindexer(int argc, char **argv) {
 
+    if (argc <= 2) {
+        help_panindexer(argv);
+        return 1;
+    }
+
+    int threads = 1;
+    size_t k = 29;
+    string graph_file = argv[2];
+
+    optind = 2; // force optind past command positional argument
+    while (true){
+        static struct option long_options[] =
+                {
+                        {"graph", required_argument, 0, 'g'},
+                        {"kmer-length", required_argument, 0, 'k'},
+                        {"threads", required_argument, 0, 't'},
+                        {0, 0, 0, 0}
+                };
+        int option_index = 0;
+        int c = getopt_long(argc, argv, "g:k:t:", long_options, &option_index);
+
+        if (c == -1) { break; }
+
+        switch (c) {
+            case 'g':
+                graph_file = optarg;
+                break;
+            case 'k':
+                k = parse<size_t>(optarg);
+                break;
+            case 't':
+                threads = parse<int>(optarg);
+                omp_set_num_threads(threads);
+                break;
+            case 'h':
+            case '?':
+            default:
+                help_panindexer(argv);
+                exit(1);
+        }
+
+    }
+
     // read the ri index file and store it in the ri index data structure
 //    string index_file = "/Users/seeskand/Documents/pangenome-index/test_data/test.txt.ri";
 //    std::ifstream in(index_file);
@@ -238,9 +291,9 @@ int main_panindexer(int argc, char **argv) {
 
 
     // read the gbz file and store it in the gbz data structure
-    string gbz_file = "/Users/seeskand/Documents/pangenome-index/test_data/hprc-v1.1-mc-grch38.gbz";
+
     unique_ptr<gbwtgraph::GBZ> gbz;
-    auto input = vg::io::VPKG::try_load_first<gbwtgraph::GBZ, gbwtgraph::GBWTGraph, HandleGraph>(gbz_file);
+    auto input = vg::io::VPKG::try_load_first<gbwtgraph::GBZ, gbwtgraph::GBWTGraph, HandleGraph>(graph_file);
     gbz = std::move(get<0>(input));
 
     bool progress = true;
@@ -252,7 +305,7 @@ int main_panindexer(int argc, char **argv) {
 
     hash_map<kmer_type, vg::pos_t > index;
 //    unique_kmers<gbwtgraph::Key64>(gbz->graph, index, 29);
-    unique_kmers_parallel<gbwtgraph::Key64>(gbz->graph, index, 5);
+    unique_kmers_parallel<gbwtgraph::Key64>(gbz->graph, index, k);
 
     // print the index values that are not the special value pos_t (0, 0, 0)
     for (auto& i : index) {
