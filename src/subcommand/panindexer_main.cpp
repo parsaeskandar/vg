@@ -10,7 +10,7 @@
 #include <iostream>
 #include <sys/stat.h>
 #include "subcommand.hpp"
-#include <spdlog/spdlog.h>
+//#include <spdlog/spdlog.h>
 #include <vg/io/vpkg.hpp>
 #include <gbwtgraph/gbwtgraph.h>
 #include "../gbwtgraph_helper.hpp"
@@ -27,7 +27,7 @@ using namespace vg;
 using namespace vg::subcommand;
 using namespace gbwtgraph;
 
-void help_panindexer(char** argv) {
+void help_panindexer(char **argv) {
     cerr << "usage: " << argv[0] << " panindexer [options]" << endl
          << endl
          << "options:" << endl
@@ -65,82 +65,54 @@ forward_strand_kmers(std::string::const_iterator begin, std::string::const_itera
 
 template<class KeyType>
 std::vector<Kmer<KeyType>>
-forward_strand_kmers(const std::string& seq, size_t k)
-{
+forward_strand_kmers(const std::string &seq, size_t k) {
     return forward_strand_kmers<KeyType>(seq.begin(), seq.end(), k);
 }
 
 
-// return an index of unique kmers and their position in the graph
-// if the kmer is not unique, the special value pos_t (0, 0, 0) TODO: check this
 
-
+// This function returns the unique kmers in the graph and stores them in the index
 template<class KeyType>
 void
-unique_kmers(const GBWTGraph& graph, vg::hash_map<gbwtgraph::Key64::value_type, vg::pos_t>& index, size_t k){
-    typedef KeyType key_type;
-    typedef Kmer<key_type> kmer_type;
-
-    // add the kmers to the hash_map and if the kmer is not unique, set the value to std::numeric_limits<size_t> max()
-    auto hash_kmers = [&](const std::vector<handle_t>& traversal, const std::string& seq){
-        // get the kmers from the forward strand of the sequence
-        std::vector<kmer_type> kmers = forward_strand_kmers<key_type>(seq, k);
-        auto iter = traversal.begin();
-        size_t node_start = 0;
-        for (auto kmer: kmers){
-            if(kmer.empty()) { continue; }
-
-            auto it = index.find(kmer.key.get_key());
-            // if the kmer is not in the index, calculate the position of the kmer in the graph and add it to the index
-            if(it == index.end()) {
-                size_t node_length = graph.get_length(*iter);
-                // find the node that contains the kmer
-                while (node_start + node_length <= kmer.offset) {
-                    node_start += node_length;
-                    ++iter;
-                    node_length = graph.get_length(*iter);
-                }
-                // get the position of the kmer in the graph
-                vg::pos_t pos{graph.get_id(*iter), graph.get_is_reverse(*iter), kmer.offset - node_start};
-                index[kmer.key.get_key()] = pos;
-            } else {
-                // if the kmer is already in the index, set the value to the special value pos_t (0, 0, 0)
-                index[kmer.key.get_key()] = vg::pos_t(0, 0, 0);
-            }
-
-        }
-    };
-
-
-
-
-    // TODO: make this parallel if possible
-    gbwtgraph::for_each_haplotype_window(graph, k, hash_kmers, false);
-
-}
-
-// parallel?
-template<class KeyType>
-void unique_kmers_parallel(const GBWTGraph& graph, vg::hash_map<gbwtgraph::Key64::value_type, vg::pos_t>& index, size_t k) {
+unique_kmers_parallel(const GBWTGraph &graph, vg::hash_map<gbwtgraph::Key64::value_type, gbwtgraph::Position> &index,
+                      size_t k) {
     typedef KeyType key_type;
     typedef Kmer<key_type> kmer_type;
     constexpr size_t KMER_CACHE_SIZE = 1024;  // Adjust cache size as needed
 
     int threads = omp_get_max_threads();
-    std::vector<std::vector<std::pair<gbwtgraph::Key64::value_type, vg::pos_t>>> cache(threads);
+    std::vector<std::vector<std::pair<gbwtgraph::Key64::value_type, gbwtgraph::Position>>> cache(threads);
+    // make a duplicates cache to handle the duplicates faster
+    hash_set<gbwtgraph::Key64::value_type> duplicates;
 
 
     // Lambda to flush the thread-local cache to the shared index
     auto flush_cache = [&](int thread_number) {
         auto current_cache = cache[thread_number];
+
+        // Sort the cache by key
+        std::sort(current_cache.begin(), current_cache.end(), [](const auto& a, const auto& b) {
+            return a.first < b.first;
+        });
+        // Remove duplicates
+        auto last = std::unique(current_cache.begin(), current_cache.end(), [](const auto& a, const auto& b) {
+            return a.first == b.first;
+        });
+        current_cache.erase(last, current_cache.end());
 #pragma omp critical
         {
-            for (auto entry : current_cache) {
-                if (index.find(entry.first) == index.end()) {
+            for (auto entry: current_cache) {
+                if (duplicates.find(entry.first) != duplicates.end()) {
+                    // Key is a known duplicate, skip it
+                    continue;
+                }
+                auto it = index.find(entry.first);
+                if (it == index.end()) {
                     index[entry.first] = entry.second;
-                } else {
-                    // Kmer already present, mark as non-unique
-                    index[entry.first] = vg::pos_t(0, 0, 0);
+                } else if (it->second != entry.second) {
+                    // remove the kmer from the index
+                    index.erase(it); // TODO: check the time complexity of this
+                    duplicates.insert(entry.first);
                 }
             }
         }
@@ -149,13 +121,13 @@ void unique_kmers_parallel(const GBWTGraph& graph, vg::hash_map<gbwtgraph::Key64
     };
 
     // Main lambda function to process kmers
-    auto hash_kmers = [&](const std::vector<handle_t>& traversal, const std::string& seq) {
+    auto hash_kmers = [&](const std::vector<handle_t> &traversal, const std::string &seq) {
         int thread_id = omp_get_thread_num();
         std::vector<kmer_type> kmers = forward_strand_kmers<key_type>(seq, k);
         auto iter = traversal.begin();
         size_t node_start = 0;
 
-        for (auto kmer : kmers) {
+        for (auto kmer: kmers) {
             if (kmer.empty()) continue;
 
             size_t node_length = graph.get_length(*iter);
@@ -164,12 +136,20 @@ void unique_kmers_parallel(const GBWTGraph& graph, vg::hash_map<gbwtgraph::Key64
                 ++iter;
                 node_length = graph.get_length(*iter);
             }
-            //print the position of the kmer in the graph
-//            cout << "Kmer: " << kmer.key.get_key() << " " << graph.get_id(*iter) << " " << graph.get_is_reverse(*iter) << " " << kmer.offset - node_start << endl;
+
             vg::pos_t pos{graph.get_id(*iter), graph.get_is_reverse(*iter), kmer.offset - node_start};
 
+            if (!gbwtgraph::Position::valid_offset(pos)) {
+#pragma omp critical (cerr)
+                {
+                    std::cerr << "index_haplotypes(): Node offset " << vg::offset(pos) << " is too large" << std::endl;
+                }
+                std::exit(EXIT_FAILURE);
+            }
             // Use thread-local cache to reduce contention on the shared index
-            cache[thread_id].emplace_back(kmer.key.get_key(), pos);
+            cache[thread_id].emplace_back(kmer.key.get_key(), gbwtgraph::Position::encode(pos));
+
+
 
             // Flush the cache if it reaches the size limit
             if (cache[thread_id].size() >= KMER_CACHE_SIZE) {
@@ -180,12 +160,10 @@ void unique_kmers_parallel(const GBWTGraph& graph, vg::hash_map<gbwtgraph::Key64
     };
 
     // Parallel execution
-    gbwtgraph::for_each_haplotype_window(graph, k, hash_kmers, true);
-    for(int thread_id = 0; thread_id < threads; thread_id++) { flush_cache(thread_id); }
+    gbwtgraph::for_each_nonredundant_window(graph, k, hash_kmers, true);
+    for (int thread_id = 0; thread_id < threads; thread_id++) { flush_cache(thread_id); }
 
 }
-
-
 
 
 // This function input is the OCC vector of the end of the sequences (#) and it returns the sorted end_of_seq vector
@@ -219,13 +197,13 @@ int main_panindexer(int argc, char **argv) {
     string graph_file = argv[2];
 
     optind = 2; // force optind past command positional argument
-    while (true){
+    while (true) {
         static struct option long_options[] =
                 {
-                        {"graph", required_argument, 0, 'g'},
+                        {"graph",       required_argument, 0, 'g'},
                         {"kmer-length", required_argument, 0, 'k'},
-                        {"threads", required_argument, 0, 't'},
-                        {0, 0, 0, 0}
+                        {"threads",     required_argument, 0, 't'},
+                        {0, 0,                             0, 0}
                 };
         int option_index = 0;
         int c = getopt_long(argc, argv, "g:k:t:", long_options, &option_index);
@@ -303,20 +281,13 @@ int main_panindexer(int argc, char **argv) {
 
     typedef gbwtgraph::Key64::value_type kmer_type;
 
-    hash_map<kmer_type, vg::pos_t > index;
+    hash_map<kmer_type, gbwtgraph::Position> index;
 //    unique_kmers<gbwtgraph::Key64>(gbz->graph, index, 29);
     unique_kmers_parallel<gbwtgraph::Key64>(gbz->graph, index, k);
-
-    // print the index values that are not the special value pos_t (0, 0, 0)
-    for (auto& i : index) {
-        if (i.second != vg::pos_t(0, 0, 0)) {
-            cout << i.first << " " << vg::id(i.second) << " " << vg::offset(i.second) << endl;
-        }
-    }
-
-
-
-
+//
+//    // print one element of the index
+//    cout << "Key " << index.begin()->first << " " << index.begin()->second.id() << "Offset " << index.begin()->second.offset() << endl;
+//
     return 0;
 }
 
