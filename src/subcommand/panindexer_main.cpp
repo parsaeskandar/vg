@@ -17,6 +17,7 @@
 #include "../gbwt_helper.hpp"
 #include "../index_registry.hpp"
 #include <gbwtgraph/index.h>
+#include <../BPlusTree.hpp>
 
 
 #include <string>
@@ -70,7 +71,6 @@ forward_strand_kmers(const std::string &seq, size_t k) {
 }
 
 
-
 // This function returns the unique kmers in the graph and stores them in the index
 template<class KeyType>
 void
@@ -91,11 +91,11 @@ unique_kmers_parallel(const GBWTGraph &graph, vg::hash_map<gbwtgraph::Key64::val
         auto current_cache = cache[thread_number];
 
         // Sort the cache by key
-        std::sort(current_cache.begin(), current_cache.end(), [](const auto& a, const auto& b) {
+        std::sort(current_cache.begin(), current_cache.end(), [](const auto &a, const auto &b) {
             return a.first < b.first;
         });
         // Remove duplicates
-        auto last = std::unique(current_cache.begin(), current_cache.end(), [](const auto& a, const auto& b) {
+        auto last = std::unique(current_cache.begin(), current_cache.end(), [](const auto &a, const auto &b) {
             return a.first == b.first;
         });
         current_cache.erase(last, current_cache.end());
@@ -183,6 +183,56 @@ vector<pair<uint64_t, uint64_t>> sort_end_of_seq(vector<uint64_t> &OCC) {
 
     return end_of_seq;
 }
+
+// Create a Run struct to store the run data structure for the BPlusTree
+struct Run {
+    size_t start_position;
+    size_t graph_position;
+    char run_char; // the character of the run TODO: can handle this with 3 bits instead of 8 bits
+
+    // Operators for the struct
+    bool operator<(const Run &other) const {
+        return start_position < other.start_position;
+    }
+
+    bool operator==(const Run &other) const {
+        return start_position == other.start_position;
+    }
+
+    Run &operator=(const Run &other) {
+        if (this == &other) {
+            return *this;
+        }
+        start_position = other.start_position;
+        graph_position = other.graph_position;
+        run_char = other.run_char;
+        return *this;
+    }
+
+    // Set the Run struct to a zero one when it is assigned to 0
+    Run& operator=(int zero) {
+        if (zero == 0) {  // Ensures it only responds to 0
+            start_position = 0;
+            graph_position = 0;
+            run_char = '\0';
+
+        }
+        return *this;
+    }
+
+    // print the Run struct using cout
+    friend std::ostream &operator<<(std::ostream &os, const Run &run) {
+        if (run.run_char != '\0') {
+            os << "start_position: " << run.start_position
+               << ", graph_position: " << run.graph_position
+               << ", run_char: " << run.run_char
+               << '\n';
+        }
+
+        return os;
+    }
+
+};
 
 
 int main_panindexer(int argc, char **argv) {
@@ -284,10 +334,32 @@ int main_panindexer(int argc, char **argv) {
     hash_map<kmer_type, gbwtgraph::Position> index;
 //    unique_kmers<gbwtgraph::Key64>(gbz->graph, index, 29);
     unique_kmers_parallel<gbwtgraph::Key64>(gbz->graph, index, k);
+
+    BPlusTree<Run> bptree(8);
+    Run R = {1, 2, 'A'};
+    Run a = {5, 3, 'A'};
+    bptree.insert(R, 4);
+    bptree.insert(a, 3);
+    // insert 10 nodes to the bptree
+//    for (size_t i = 0; i < 10; i++) {
+//        Run temp = {i, 5 * i + 1, 'B'};
+//        bptree.insert(temp, 2 * i + 1);
+//    }
+
+
+    bptree.bpt_print();
+
+
+
+
+
+
 //
 //    // print one element of the index
 //    cout << "Key " << index.begin()->first << " " << index.begin()->second.id() << "Offset " << index.begin()->second.offset() << endl;
 //
+
+
     return 0;
 }
 
