@@ -6,6 +6,7 @@
 #ifndef VG_BPLUSTREE_HPP
 #define VG_BPLUSTREE_HPP
 bool DEBUG = true;
+
 #include <iostream>
 
 template<typename T>
@@ -251,7 +252,7 @@ public:
 
         }
             // third case, when we hit the next run starting point but not the previous one
-        else if ((new_run.start_position > arr[index - 1].start_position|| index == 0) &&
+        else if ((new_run.start_position > arr[index - 1].start_position || index == 0) &&
                  new_run.start_position + run_length == arr[index].start_position) {
             if (DEBUG) cout << "insert run case 3" << endl;
             // two cases here, first being the new run graph_position not be the same as the next run graph_position
@@ -480,6 +481,18 @@ public:
                 }
             }
         }
+        if (DEBUG) {
+            cout << "merging items with the next node output " << endl;
+            for (int i = 0; i < len; i++) {
+                cout << arr[i] << " ";
+            }
+            // next node items
+            cout << "next node: ";
+            for (int i = 0; i < next_node->size; i++) {
+                cout << next_node->item[i] << " ";
+            }
+
+        }
 
 
     }
@@ -504,6 +517,10 @@ public:
 
     // this function check how can the underflow be handled
     void underflow(Node<T> *cursor) {
+        if (DEBUG) {
+            cout << "entering underflow" << endl;
+            cout << cursor->size << endl;
+        }
         bool handled = false;
         if (cursor != this->root) {
 
@@ -610,28 +627,53 @@ public:
                     if (DEBUG) cout << "underflow case 3" << endl;
                     Node<T> *leftsibling = cursor->parent->children[left];
 
+                    cout << "left sib " << leftsibling->size << endl;
+                    for (int i = 0; i < leftsibling->size; i++) {
+                        cout << leftsibling->item[i] << " ";
+                    }
+
+
                     //merge two leaf node
                     for (int i = 0; i < cursor->size; i++) {
                         leftsibling->item[leftsibling->size + i] = cursor->item[i];
                     }
+
                     //edit pointer
                     leftsibling->children[leftsibling->size] = nullptr;
+                    cout << "here 1 " << endl;
                     leftsibling->size = leftsibling->size + cursor->size;
+                    cout << "here 1 " << endl;
                     leftsibling->children[leftsibling->size] = cursor->children[cursor->size];
+                    cout << "here 1 " << endl;
+                    leftsibling->next = cursor->next;
+                    cout << "here 1 " << endl;
+                    if (leftsibling->next != nullptr) { leftsibling->next->prev = leftsibling; }
+                    cout << "here 1 " << endl;
 
                     //parent property edit
                     Removepar(cursor, left, cursor->parent);
-                    for (int i = 0; i < cursor->size; i++) {
-                        cursor->item[i] = 0;
-                        cursor->children[i] = nullptr;
-                    }
-                    cursor->children[cursor->size] = nullptr;
-                    leftsibling->next = cursor->next;
 
-                    delete[] cursor->item;
-                    delete[] cursor->children;
-                    delete cursor;
+                    cout << "here 2 " << endl;
+//                    if (cursor != nullptr) {
+//                        for (int i = 0; i < cursor->size; i++) {
+//                            cursor->item[i] = 0;
+//                            cursor->children[i] = nullptr;
+//                        }
+//                        cout << "here 2 " << endl;
+//                        cout << cursor->size << endl;
+//                        cursor->children[cursor->size] = nullptr;
+//
+////                    leftsibling->next = cursor->next;
+//
+//                        cout << "here 2 " << endl;
+//                        delete[] cursor->item;
+//                        delete[] cursor->children;
+//                        delete cursor;
+//
+//
+//                    }
 
+                    cout << "here 2 " << endl;
                     handled = true;
 
                 }
@@ -648,6 +690,7 @@ public:
                     cursor->size = rightsibling->size + cursor->size;
                     cursor->children[cursor->size] = rightsibling->children[rightsibling->size];
                     cursor->next = rightsibling->next;
+                    if (cursor->next != nullptr) { cursor->next->prev = cursor; }
 
                     //parent property edit
                     Removepar(rightsibling, right - 1, cursor->parent);
@@ -788,28 +831,40 @@ public:
                     merge_items_prev(cursor->item, cursor->prev, cursor->size);
                 }
                 // the cursor or the cursor.next can both underflow here!
-                if (cursor->size < std::ceil(this->degree / 2)) {
-                    cout << "underflow on the cursor node" << endl;
-                    if (cursor->next != nullptr) {
-                        if (cursor->next->size + cursor->size < this->degree) {
-                            cout << "underflow on the next node" << endl;
-                            merge_nodes(cursor, cursor->next);
-                            // print all items in cursor and its parent node
-//                            cout << "cursor: ";
-//                            for (int i = 0; i < cursor->size; i++) {
-//                                cout << cursor->item[i] << " ";
-//                            }
-//                            cout << '\n' << "cursor parent: ------- ";
-//                            for (int i = 0; i < cursor->parent->size; i++) {
-//                                cout << cursor->parent->item[i] << " ";
-//                            }
+//                if (cursor->size < std::ceil(this->degree / 2)) {
+//                    cout << "underflow on the cursor node" << endl;
+//                    if (cursor->next != nullptr) {
+//                        if (cursor->next->size + cursor->size < this->degree) {
+//                            cout << "underflow on the next node" << endl;
+//                            merge_nodes(cursor, cursor->next);
+//                            // print all items in cursor and its parent node
+////                            cout << "cursor: ";
+////                            for (int i = 0; i < cursor->size; i++) {
+////                                cout << cursor->item[i] << " ";
+////                            }
+////                            cout << '\n' << "cursor parent: ------- ";
+////                            for (int i = 0; i < cursor->parent->size; i++) {
+////                                cout << cursor->parent->item[i] << " ";
+////                            }
+//
+//                        } else {
+//                            underflow(cursor);
+//                        }
+//                    } else {
+//                        underflow(cursor);
+//                    }
+//                }
 
-                        } else {
-                            underflow(cursor);
-                        }
-                    } else {
-                        underflow(cursor);
+
+                if (cursor->next != nullptr) {
+                    if (cursor->next->size < std::ceil(this->degree / 2)) {
+                        cout << "normal underflow on the next node " << endl;
+                        underflow(cursor->next);
                     }
+                }
+                if (cursor->size < std::ceil(this->degree / 2)) {
+                    cout << "normal underflow on the cursor node" << endl;
+                    underflow(cursor);
                 }
 
                 //edit pointer(next node)
@@ -849,6 +904,11 @@ public:
                 if (inserted_index == 0 && cursor->prev != nullptr) {
                     cout << "merging items prev here" << endl;
                     merge_items_prev(item_copy, cursor->prev, item_copy_size);
+                    // print all item_copy items
+                    cout << "item_copy: ";
+                    for (int i = 0; i < item_copy_size; i++) {
+                        cout << item_copy[i] << " ";
+                    }
                 }
 
                 // Have to check if this was an overflow case or not
@@ -990,6 +1050,7 @@ public:
                     }
 
                 }
+                //TODO: do we need a check for the prev node? I don't think so
                 if (cursor->next != nullptr) {
                     if (cursor->next->size < std::ceil(this->degree / 2)) {
                         cout << "underflow on the next node" << endl;
@@ -1202,8 +1263,13 @@ public:
         T target = cursor->item[index];
         cout << "removing " << target << " from parent" << cursor->item[0] << endl;
 
-        if (cursor == this->root && cursor->size == 1){
-            Node<T>* remainingChild = (remover == cursor->children[0]) ? cursor->children[1] : cursor->children[0];
+        if (cursor == this->root && cursor->size == 1) {
+            Node<T> *remainingChild = (remover == cursor->children[0]) ? cursor->children[1] : cursor->children[0];
+            // print items in remaining child
+            cout << "remaining child: ";
+            for (int i = 0; i < remainingChild->size; i++) {
+                cout << remainingChild->item[i] << " ";
+            }
 
             // Clean up the node to remove
             clear(remover);
@@ -1221,7 +1287,7 @@ public:
 
             return;
 
-        //if cursor is root, and there are no more data -> child node is to be root!
+            //if cursor is root, and there are no more data -> child node is to be root!
 //        if (cursor == this->root && cursor->size == 1) {//root case
 //            if (remover == cursor->children[0]) {
 //                cout << "here 1" << endl;
@@ -1266,175 +1332,174 @@ public:
 //                delete cursor;
 //                cout << "here" << endl;
 //                return;
-            }
-        else {
-
-
-        //remove data
-        for (int i = index; i < cursor->size - 1; i++) {
-            cursor->item[i] = cursor->item[i + 1];
-        }
-        cursor->item[cursor->size - 1] = 0;
-
-        //remove pointer
-        int rem_index = -1;
-        for (int i = 0; i < cursor->size + 1; i++) {
-            if (cursor->children[i] == remover) {
-                rem_index = i;
-            }
-        }
-        if (rem_index == -1) {
-            return;
-        }
-        for (int i = rem_index; i < cursor->size; i++) {
-            cursor->children[i] = cursor->children[i + 1];
-        }
-        cursor->children[cursor->size] = nullptr;
-        cursor->size--;
-
-        // print all items in cursor node
-        cout << "cursor normal case: ";
-        for (int i = 0; i < cursor->size; i++) {
-            cout << cursor->item[i] << " ";
-        }
-
-        //underflow check
-        if (cursor == this->root) {
-            return;
-        }
-        if (cursor->size < degree / 2) {//underflow case
-
-            int sib_index = -1;
-            for (int i = 0; i < cursor->parent->size + 1; i++) {
-                if (cursor == cursor->parent->children[i]) {
-                    sib_index = i;
-                }
-            }
-            int left = sib_index - 1;
-            int right = sib_index + 1;
-
-            if (left >= 0) {// left_sibiling exists
-                Node<T> *leftsibling = cursor->parent->children[left];
-
-                if (leftsibling->size > degree / 2) { //if data number is enough to use this node
-                    T *temp = new T[cursor->size + 1];
-
-                    //copy item
-                    for (int i = 0; i < cursor->size; i++) {
-                        temp[i] = cursor->item[i];
-                    }
-
-                    //insert and rearrange at cursor
-                    item_insert(temp, cursor->parent->item[left], cursor->size);
-                    for (int i = 0; i < cursor->size + 1; i++) {
-                        cursor->item[i] = temp[i];
-                    }
-                    cursor->parent->item[left] = leftsibling->item[leftsibling->size - 1];
-                    delete[] temp;
-
-                    Node<T> **child_temp = new Node<T> *[cursor->size + 2];
-                    //copy child node
-                    for (int i = 0; i < cursor->size + 1; i++) {
-                        child_temp[i] = cursor->children[i];
-                    }
-                    //insert and rearrange at child
-                    child_insert(child_temp, leftsibling->children[leftsibling->size], cursor->size, 0);
-
-                    for (int i = 0; i < cursor->size + 2; i++) {
-                        cursor->children[i] = child_temp[i];
-                    }
-                    delete[] child_temp;
-
-                    //size edit
-                    cursor->size++;
-                    leftsibling->size--;
-                    return;
-
-                }
-            }
-
-            if (right <= cursor->parent->size) {// right_sibiling exists
-                Node<T> *rightsibling = cursor->parent->children[right];
-
-                if (rightsibling->size > degree / 2) {//if data number is enough to use this node
-                    T *temp = new T[cursor->size + 1];
-
-                    //copy item
-                    for (int i = 0; i < cursor->size; i++) {
-                        temp[i] = cursor->item[i];
-                    }
-                    //insert and rearrange at cursor
-                    item_insert(temp, cursor->parent->item[sib_index], cursor->size);
-                    for (int i = 0; i < cursor->size + 1; i++) {
-                        cursor->item[i] = temp[i];
-                    }
-                    cursor->parent->item[sib_index] = rightsibling->item[0];
-                    delete[] temp;
-
-                    //insert and reaarange at child
-
-                    cursor->children[cursor->size + 1] = rightsibling->children[0];
-                    for (int i = 0; i < rightsibling->size; i++) {
-                        rightsibling->children[i] = rightsibling->children[i + 1];
-                    }
-                    rightsibling->children[rightsibling->size] = nullptr;
-
-                    cursor->size++;
-                    rightsibling->size--;
-                    return;
-
-                }
-            }
-
-            //if sibling is not enought to use their data
-            //we have to merge step
-            if (left >= 0) { // left_sibling exists
-                Node<T> *leftsibling = cursor->parent->children[left];
-
-                leftsibling->item[leftsibling->size] = cursor->parent->item[left];
-                //merge two leaf node
-                for (int i = 0; i < cursor->size; i++) {
-                    leftsibling->item[leftsibling->size + i + 1] = cursor->item[i];
-                }
-                for (int i = 0; i < cursor->size + 1; i++) {
-                    leftsibling->children[leftsibling->size + i + 1] = cursor->children[i];
-                    cursor->children[i]->parent = leftsibling;
-                }
-                for (int i = 0; i < cursor->size + 1; i++) {
-                    cursor->children[i] = nullptr;
-                }
-                leftsibling->size = leftsibling->size + cursor->size + 1;
-                //delete recursion
-                Removepar(cursor, left, cursor->parent);
-                return;
-
-            }
-            if (right <= cursor->parent->size) { // right_sibiling exists
-                Node<T> *rightsibling = cursor->parent->children[right];
-
-                cursor->item[cursor->size] = cursor->parent->item[right - 1];
-                //merge two leaf node
-                for (int i = 0; i < rightsibling->size; i++) {
-                    cursor->item[cursor->size + 1 + i] = rightsibling->item[i];
-                }
-                for (int i = 0; i < rightsibling->size + 1; i++) {
-                    cursor->children[cursor->size + i + 1] = rightsibling->children[i];
-                    rightsibling->children[i]->parent = rightsibling;
-                }
-                for (int i = 0; i < rightsibling->size + 1; i++) {
-                    rightsibling->children[i] = nullptr;
-                }
-                //edit pointer
-                rightsibling->size = rightsibling->size + cursor->size + 1;
-                //parent property edit
-                Removepar(rightsibling, right - 1, cursor->parent);
-                return;
-            }
         } else {
-            return;
+
+
+            //remove data
+            for (int i = index; i < cursor->size - 1; i++) {
+                cursor->item[i] = cursor->item[i + 1];
+            }
+            cursor->item[cursor->size - 1] = 0;
+
+            //remove pointer
+            int rem_index = -1;
+            for (int i = 0; i < cursor->size + 1; i++) {
+                if (cursor->children[i] == remover) {
+                    rem_index = i;
+                }
+            }
+            if (rem_index == -1) {
+                return;
+            }
+            for (int i = rem_index; i < cursor->size; i++) {
+                cursor->children[i] = cursor->children[i + 1];
+            }
+            cursor->children[cursor->size] = nullptr;
+            cursor->size--;
+
+            // print all items in cursor node
+            cout << "cursor normal case: ";
+            for (int i = 0; i < cursor->size; i++) {
+                cout << cursor->item[i] << " ";
+            }
+
+            //underflow check
+            if (cursor == this->root) {
+                return;
+            }
+            if (cursor->size < degree / 2) {//underflow case
+
+                int sib_index = -1;
+                for (int i = 0; i < cursor->parent->size + 1; i++) {
+                    if (cursor == cursor->parent->children[i]) {
+                        sib_index = i;
+                    }
+                }
+                int left = sib_index - 1;
+                int right = sib_index + 1;
+
+                if (left >= 0) {// left_sibiling exists
+                    Node<T> *leftsibling = cursor->parent->children[left];
+
+                    if (leftsibling->size > degree / 2) { //if data number is enough to use this node
+                        T *temp = new T[cursor->size + 1];
+
+                        //copy item
+                        for (int i = 0; i < cursor->size; i++) {
+                            temp[i] = cursor->item[i];
+                        }
+
+                        //insert and rearrange at cursor
+                        item_insert(temp, cursor->parent->item[left], cursor->size);
+                        for (int i = 0; i < cursor->size + 1; i++) {
+                            cursor->item[i] = temp[i];
+                        }
+                        cursor->parent->item[left] = leftsibling->item[leftsibling->size - 1];
+                        delete[] temp;
+
+                        Node<T> **child_temp = new Node<T> *[cursor->size + 2];
+                        //copy child node
+                        for (int i = 0; i < cursor->size + 1; i++) {
+                            child_temp[i] = cursor->children[i];
+                        }
+                        //insert and rearrange at child
+                        child_insert(child_temp, leftsibling->children[leftsibling->size], cursor->size, 0);
+
+                        for (int i = 0; i < cursor->size + 2; i++) {
+                            cursor->children[i] = child_temp[i];
+                        }
+                        delete[] child_temp;
+
+                        //size edit
+                        cursor->size++;
+                        leftsibling->size--;
+                        return;
+
+                    }
+                }
+
+                if (right <= cursor->parent->size) {// right_sibiling exists
+                    Node<T> *rightsibling = cursor->parent->children[right];
+
+                    if (rightsibling->size > degree / 2) {//if data number is enough to use this node
+                        T *temp = new T[cursor->size + 1];
+
+                        //copy item
+                        for (int i = 0; i < cursor->size; i++) {
+                            temp[i] = cursor->item[i];
+                        }
+                        //insert and rearrange at cursor
+                        item_insert(temp, cursor->parent->item[sib_index], cursor->size);
+                        for (int i = 0; i < cursor->size + 1; i++) {
+                            cursor->item[i] = temp[i];
+                        }
+                        cursor->parent->item[sib_index] = rightsibling->item[0];
+                        delete[] temp;
+
+                        //insert and reaarange at child
+
+                        cursor->children[cursor->size + 1] = rightsibling->children[0];
+                        for (int i = 0; i < rightsibling->size; i++) {
+                            rightsibling->children[i] = rightsibling->children[i + 1];
+                        }
+                        rightsibling->children[rightsibling->size] = nullptr;
+
+                        cursor->size++;
+                        rightsibling->size--;
+                        return;
+
+                    }
+                }
+
+                //if sibling is not enought to use their data
+                //we have to merge step
+                if (left >= 0) { // left_sibling exists
+                    Node<T> *leftsibling = cursor->parent->children[left];
+
+                    leftsibling->item[leftsibling->size] = cursor->parent->item[left];
+                    //merge two leaf node
+                    for (int i = 0; i < cursor->size; i++) {
+                        leftsibling->item[leftsibling->size + i + 1] = cursor->item[i];
+                    }
+                    for (int i = 0; i < cursor->size + 1; i++) {
+                        leftsibling->children[leftsibling->size + i + 1] = cursor->children[i];
+                        cursor->children[i]->parent = leftsibling;
+                    }
+                    for (int i = 0; i < cursor->size + 1; i++) {
+                        cursor->children[i] = nullptr;
+                    }
+                    leftsibling->size = leftsibling->size + cursor->size + 1;
+                    //delete recursion
+                    Removepar(cursor, left, cursor->parent);
+                    return;
+
+                }
+                if (right <= cursor->parent->size) { // right_sibiling exists
+                    Node<T> *rightsibling = cursor->parent->children[right];
+
+                    cursor->item[cursor->size] = cursor->parent->item[right - 1];
+                    //merge two leaf node
+                    for (int i = 0; i < rightsibling->size; i++) {
+                        cursor->item[cursor->size + 1 + i] = rightsibling->item[i];
+                    }
+                    for (int i = 0; i < rightsibling->size + 1; i++) {
+                        cursor->children[cursor->size + i + 1] = rightsibling->children[i];
+                        rightsibling->children[i]->parent = rightsibling;
+                    }
+                    for (int i = 0; i < rightsibling->size + 1; i++) {
+                        rightsibling->children[i] = nullptr;
+                    }
+                    //edit pointer
+                    rightsibling->size = rightsibling->size + cursor->size + 1;
+                    //parent property edit
+                    Removepar(rightsibling, right - 1, cursor->parent);
+                    return;
+                }
+            } else {
+                return;
+            }
         }
     }
-}
 
     void clear(Node<T> *cursor) {
         if (cursor != nullptr) {
