@@ -1491,6 +1491,71 @@ public:
             }
         }
     }
+
+    // counting the number of runs we are storing in the B+ tree leafs
+    size_t get_bpt_size(){
+        return get_size(this->root);
+    }
+
+    size_t get_size(Node<T> *cursor){
+        size_t size = 0;
+        if (cursor != NULL) {
+            if (cursor->is_leaf) {
+                size += cursor->size;
+            } else {
+                for (int i = 0; i < cursor->size + 1; ++i) {
+                    size += get_size(cursor->children[i]);
+                }
+            }
+        }
+        return size;
+    }
+
+    class Iterator {
+        Node<T> *node;
+        int index;
+
+    public:
+        Iterator(Node<T> *node, int index) : node(node), index(index) {}
+
+        T& operator*() const {
+            return node->item[index];
+        }
+
+        Iterator& operator++() {
+            index++;
+            if (index >= node->size) {
+                node = node->next;
+                index = 0;
+            }
+            return *this;
+        }
+
+        bool operator!=(const Iterator& other) const {
+            return node != other.node || index != other.index;
+        }
+
+        bool operator==(const Iterator& other) const {
+            return node == other.node && index == other.index;
+        }
+    };
+
+    Iterator begin() {
+        Node<T> *current = root;
+        if (!current) return Iterator(nullptr, 0);
+        // Navigate to the leftmost leaf
+        while (current && !current->is_leaf) {
+            current = current->children[0];
+        }
+        return Iterator(current, 0);
+    }
+
+    Iterator end() {
+        return Iterator(nullptr, 0);
+    }
+
+    // Additional BPlusTree methods...
 };
+
 
 #endif

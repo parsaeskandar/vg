@@ -22,6 +22,8 @@
 
 #include <string>
 
+bool debug = false;
+
 using namespace std;
 using namespace ri;
 using namespace vg;
@@ -33,6 +35,7 @@ void help_panindexer(char **argv) {
          << endl
          << "options:" << endl
          << "    -g, --graph FILE              input graph file" << endl
+         << "    -i, --index FILE              input index file" << endl
          << "    -k, --kmer-length N            length of the kmers in the index [default 29]" << endl
          << "    -t, --threads N          number of threads to use [1]" << endl;
 }
@@ -187,8 +190,8 @@ vector<pair<uint64_t, uint64_t>> sort_end_of_seq(vector<uint64_t> &OCC) {
 // Create a Run struct to store the run data structure for the BPlusTree
 struct Run {
     size_t start_position;
-    size_t graph_position;
-    char run_char; // the character of the run TODO: can handle this with 3 bits instead of 8 bits
+    gbwtgraph::Position graph_position;
+//    char run_char; // the character of the run TODO: can handle this with 3 bits instead of 8 bits
 
     // Operators for the struct
     bool operator<(const Run &other) const {
@@ -199,52 +202,83 @@ struct Run {
         return start_position == other.start_position;
     }
 
+
     Run &operator=(const Run &other) {
         if (this == &other) {
             return *this;
         }
         start_position = other.start_position;
         graph_position = other.graph_position;
-        run_char = other.run_char;
+//        run_char = other.run_char;
         return *this;
     }
 
     // Set the Run struct to a zero one when it is assigned to 0
-    Run& operator=(int zero) {
+    Run &operator=(int zero) {
         if (zero == 0) {  // Ensures it only responds to 0
             start_position = 0;
-            graph_position = 0;
-            run_char = '\0';
-
+            graph_position = gbwtgraph::Position::no_value();
         }
         return *this;
     }
 
-    // print the Run struct using cout
+    // print the Run struct
     friend std::ostream &operator<<(std::ostream &os, const Run &run) {
-        if (run.run_char != '\0') {
-            os << "start_position: " << run.start_position
-               << ", graph_position: " << run.graph_position
-               << ", run_char: " << run.run_char
-               << '\n';
-        }
+        os << "start_position: " << run.start_position
+           << ", graph_position: " << run.graph_position.value;
 
         return os;
     }
 
 };
 
+// this function iterate over all of the kmers in the r-index and add the runs to the BPlusTree recursively
+// TODO: make this function parallel
+void kmers_to_bplustree(r_index<> &idx, BPlusTree<Run> &bptree,
+                        vg::hash_map<gbwtgraph::Key64::value_type, gbwtgraph::Position> &index, size_t k,
+                        range_t interval, const string current_kmer) {
+    if (current_kmer.length() == k && interval.first <= interval.second) {
+        if (debug) {
+            cout << "The current kmer is: " << current_kmer << endl;
+            cout << "The interval is: " << interval.first << " " << interval.second << endl;
+        }
+        // creating the kmer with the key type
+        gbwtgraph::Key64 kmer_key = gbwtgraph::Key64::encode(current_kmer);
+        // check if the kmer_key is in the index and if it is add the run to the BPlusTree
+        auto it = index.find(kmer_key.get_key());
+        if (it != index.end()) {
+            Run run = {interval.first, it->second};
+            if (debug) cout << "The adding run is: " << run << " with len " << interval.second - interval.first + 1 << endl;
+            bptree.insert(run, interval.second - interval.first + 1);
+        }
+        return;
+    }
+
+    for (char base: { 'A', 'C', 'G', 'T' }){
+
+        if (interval.first <= interval.second) {
+            kmers_to_bplustree(idx, bptree, index, k, idx.LF(interval, base), base + current_kmer);
+        }
+    }
+
+
+
+
+
+}
+
 
 int main_panindexer(int argc, char **argv) {
 
-    if (argc <= 2) {
+    if (argc <= 3) {
         help_panindexer(argv);
         return 1;
     }
 
     int threads = 1;
-    size_t k = 29;
+    size_t k = 29; // TODO: change the default value
     string graph_file = argv[2];
+    string index_file;
 
     optind = 2; // force optind past command positional argument
     while (true) {
@@ -252,11 +286,12 @@ int main_panindexer(int argc, char **argv) {
                 {
                         {"graph",       required_argument, 0, 'g'},
                         {"kmer-length", required_argument, 0, 'k'},
+                        {"index",       required_argument, 0, 'i'},
                         {"threads",     required_argument, 0, 't'},
                         {0, 0,                             0, 0}
                 };
         int option_index = 0;
-        int c = getopt_long(argc, argv, "g:k:t:", long_options, &option_index);
+        int c = getopt_long(argc, argv, "g:k:i:t:", long_options, &option_index);
 
         if (c == -1) { break; }
 
@@ -270,6 +305,9 @@ int main_panindexer(int argc, char **argv) {
             case 't':
                 threads = parse<int>(optarg);
                 omp_set_num_threads(threads);
+                break;
+            case 'i':
+                index_file = optarg;
                 break;
             case 'h':
             case '?':
@@ -287,12 +325,15 @@ int main_panindexer(int argc, char **argv) {
 //
 //    //fast or small index?
 //    in.read((char*)&fast,sizeof(fast));
+//    r_index<> idx;
+//    idx.load(in);
+
+
 //
 //    string pattern = "#";
 //
 ////    locate<r_index<> >(in, pattern);
-//    r_index<> idx;
-//    idx.load(in);
+
 //
 //    // get the ISA values for the end of each sequence by searching for pattern # and locating the results
 //    auto OCC = idx.locate_all(pattern);
@@ -334,20 +375,78 @@ int main_panindexer(int argc, char **argv) {
     hash_map<kmer_type, gbwtgraph::Position> index;
 //    unique_kmers<gbwtgraph::Key64>(gbz->graph, index, 29);
     unique_kmers_parallel<gbwtgraph::Key64>(gbz->graph, index, k);
-
-    BPlusTree<Run> bptree(8);
-    Run R = {1, 2, 'A'};
-    Run a = {5, 3, 'A'};
-    bptree.insert(R, 4);
-    bptree.insert(a, 3);
-    // insert 10 nodes to the bptree
-//    for (size_t i = 0; i < 10; i++) {
-//        Run temp = {i, 5 * i + 1, 'B'};
-//        bptree.insert(temp, 2 * i + 1);
-//    }
+    BPlusTree<Run> bptree(15); // TODO: determine the BPlusTree degree
+    // reading the rindex file
+//    string index_file = "/Users/seeskand/Documents/pangenome-index/test_data/x.giraffe.ri";
+    std::ifstream in(index_file);
+    bool fast;
+    //fast or small index?
+    in.read((char *) &fast, sizeof(fast));
+    r_index<> idx;
+    idx.load(in);
 
 
-    bptree.bpt_print();
+
+    kmers_to_bplustree(idx, bptree, index, k, {0, idx.bwt_size() - 1}, "");
+
+    // print the BPlusTree
+//    bptree.bpt_print();
+//    bptree.bpt_check_items();
+
+    // computing some statistics
+    auto unique_kmers_size = index.size();
+    auto bptree_items = bptree.get_bpt_size();
+    auto bwt_size = idx.bwt_size();
+    size_t tag_arrays_covered = 0;
+
+    cout << "The number of unique kmers in the index is: " << unique_kmers_size << endl;
+    cout << "The number of items in the BPlusTree is: " << bptree_items << endl;
+    cout << "The size of the BWT is: " << bwt_size << endl;
+
+
+    // calculating the fraction of the tag arrays covered
+    for (auto it = bptree.begin(); it != bptree.end(); ++it) {
+         if ((*it).graph_position.value != 0) {
+             auto next_it = it;
+             ++next_it;
+             if (next_it != bptree.end()) {
+                 auto next_item = *next_it;
+                 tag_arrays_covered += (next_item.start_position - (*it).start_position);
+             }
+         }
+    }
+
+    cout << "The fraction of the tag arrays covered is: " << tag_arrays_covered << " / " << bwt_size << " = " << (double)tag_arrays_covered / bwt_size << endl;
+
+
+
+
+
+
+    /*
+     * Here is a test for the BPlusTree
+    for (size_t i = 3; i < 10; i+=2){
+        bptree.insert({i, 3}, 1);
+        cout << "The B+ tree is: " << endl;
+        bptree.bpt_print();
+    }
+    for (size_t i = 4; i < 9; i+=4){
+        bptree.insert({i, 3}, 1);
+        cout << "The B+ tree is: " << endl;
+        bptree.bpt_print();
+    }
+
+    for (size_t i = 10; i < 30; i+=2){
+        bptree.insert({i, 3}, 1);
+        cout << "The B+ tree is: " << endl;
+        bptree.bpt_print();
+    }
+    for (size_t i = 29; i > 12; i-=2){
+        bptree.insert({i, 3}, 1);
+        cout << "The B+ tree is: " << endl;
+        bptree.bpt_print();
+    }
+      */
 
 
 
