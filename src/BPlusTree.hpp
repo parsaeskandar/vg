@@ -5,7 +5,7 @@
 
 #ifndef VG_BPLUSTREE_HPP
 #define VG_BPLUSTREE_HPP
-bool DEBUG = true;
+bool DEBUG = false;
 
 #include <iostream>
 
@@ -191,7 +191,9 @@ public:
         }
         inserted_index = index;
 
-        cerr << "++++" << new_run << " " << len << " " << index << "   " << arr[index - 1] << arr[index + 1] << endl;
+        if (DEBUG)
+            cerr << "++++" << new_run << " " << len << " " << index << "   " << arr[index - 1] << arr[index + 1]
+                 << endl;
 
 
 
@@ -294,7 +296,6 @@ public:
                     if (DEBUG) cout << "insert run case 4.1.2" << endl;
                     // in this case we just have to change the starting position of the next non-gap run and remove the index-1 gap run
                     arr[index].start_position = new_run.start_position;
-                    cout << arr[index] << index << endl;
                     for (size_t i = index - 1; i < len - 1; i++) {
                         arr[i] = arr[i + 1];
                     }
@@ -308,8 +309,16 @@ public:
                 // two cases here too! first being the new run graph_position not be the same as the next run graph_position
                 if (new_run.graph_position.value != arr[index].graph_position.value) {
                     if (DEBUG) cout << "insert run case 4.2.1" << endl;
+                    //1-3 4-0   4-3 6-0   6-4 7-0 //TODO
+
+                    // 1-3 6-4 7-0
                     // in this case we don't merge with the next run, but we need to merge with the previous run
-                    arr[index - 1] = new_run;
+//                    arr[index - 1] = new_run;
+                    // just remove the index run
+                    for (size_t i = index - 1; i < len - 1; i++) {
+                        arr[i] = arr[i + 1];
+                    }
+                    len--;
                     inserted_index = index - 1;
                 }
                     // the other case is when the new run graph_position is the same as the next non-gap run graph_position
@@ -451,8 +460,6 @@ public:
     // handle the merging items between nodes
     void merge_items_next(T *arr, Node<T> *next_node, size_t &len) {
         if (next_node != nullptr) {
-            cout << "next node is not null" << endl;
-            cout << next_node->item[0] << " " << arr[len - 1] << endl;
             if (next_node->item[0].start_position < arr[len - 1].start_position) {
                 cerr << "Error: this run overlaps with the next run!" << endl;
                 cerr << "Changing the run length to the maximum it can be before overlapping" << endl;
@@ -461,7 +468,6 @@ public:
                 // if we hit the next node
                 if (next_node->item[0].start_position == arr[len - 1].start_position) {
                     if (next_node->item[0].graph_position == arr[len - 2].graph_position) {
-                        cout << "here" << endl;
                         // merging the last item with first item in next node
                         // in this case we have to remove the first item in the next node
                         for (int i = 0; i < next_node->size - 1; i++) {
@@ -486,11 +492,6 @@ public:
             for (int i = 0; i < len; i++) {
                 cout << arr[i] << " ";
             }
-            // next node items
-            cout << "next node: ";
-            for (int i = 0; i < next_node->size; i++) {
-                cout << next_node->item[i] << " ";
-            }
 
         }
 
@@ -500,7 +501,6 @@ public:
     // handle the merging items between nodes
     void merge_items_prev(T *arr, Node<T> *prev_node, size_t &len) {
         if (prev_node != nullptr) {
-            cout << prev_node->item[prev_node->size - 1];
             if (prev_node->item[prev_node->size - 1].graph_position == arr[0].graph_position) {
                 if (DEBUG) cout << "merging items with the previous node" << endl;
                 // merging the last item with first item in next node
@@ -539,11 +539,7 @@ public:
                 if (left >= 0 && !handled) {// left_sibiling exists
                     Node<T> *leftsibling = cursor->parent->children[left];
                     if (DEBUG) cout << "underflow case 1" << endl;
-                    // print all items in left sibling
-                    cout << "left sibling: ";
-                    for (int i = 0; i < leftsibling->size; i++) {
-                        cout << leftsibling->item[i] << " ";
-                    }
+
 
                     if (leftsibling->size > degree / 2) { //if data number is enough to use this node
                         if (DEBUG) cout << "underflow case 1.1" << endl;
@@ -627,11 +623,6 @@ public:
                     if (DEBUG) cout << "underflow case 3" << endl;
                     Node<T> *leftsibling = cursor->parent->children[left];
 
-                    cout << "left sib " << leftsibling->size << endl;
-                    for (int i = 0; i < leftsibling->size; i++) {
-                        cout << leftsibling->item[i] << " ";
-                    }
-
 
                     //merge two leaf node
                     for (int i = 0; i < cursor->size; i++) {
@@ -640,20 +631,14 @@ public:
 
                     //edit pointer
                     leftsibling->children[leftsibling->size] = nullptr;
-                    cout << "here 1 " << endl;
                     leftsibling->size = leftsibling->size + cursor->size;
-                    cout << "here 1 " << endl;
                     leftsibling->children[leftsibling->size] = cursor->children[cursor->size];
-                    cout << "here 1 " << endl;
                     leftsibling->next = cursor->next;
-                    cout << "here 1 " << endl;
                     if (leftsibling->next != nullptr) { leftsibling->next->prev = leftsibling; }
-                    cout << "here 1 " << endl;
 
                     //parent property edit
                     Removepar(cursor, left, cursor->parent);
 
-                    cout << "here 2 " << endl;
 //                    if (cursor != nullptr) {
 //                        for (int i = 0; i < cursor->size; i++) {
 //                            cursor->item[i] = 0;
@@ -673,7 +658,6 @@ public:
 //
 //                    }
 
-                    cout << "here 2 " << endl;
                     handled = true;
 
                 }
@@ -720,8 +704,8 @@ public:
     void
     merge_nodes(Node<T> *leftsibling, Node<T> *cursor) { // TODO: what if the parents are not the same for the two nodes
 
-        cout << "merging nodes" << endl;
-        cout << cursor->size << endl;
+        if (DEBUG) cout << "merging nodes" << endl;
+        if (DEBUG) cout << cursor->size << endl;
         int left = -1; // TODO: maybe change this the pointers cursor->next maybe
         for (int i = 0; i < cursor->parent->size + 1; i++) {
             if (cursor == cursor->parent->children[i]) {
@@ -742,16 +726,6 @@ public:
         leftsibling->children[leftsibling->size] = cursor->children[cursor->size];
         leftsibling->next = cursor->next;
 
-
-        cout << "left: " << left << endl;
-        for (int i = 0; i < cursor->parent->size; i++) {
-            cout << cursor->parent->item[i] << " ";
-        }
-        // print items in cursor node
-        cout << "cursor: ";
-        for (int i = 0; i < cursor->size; i++) {
-            cout << cursor->item[i] << " ";
-        }
         //parent property edit
         Removepar(cursor, left, cursor->parent);
         // print items in cursor node
@@ -782,7 +756,6 @@ public:
 //        delete[] cursor->item;
 //        delete[] cursor->children;
 //        delete cursor;
-        cout << "sure" << endl;
 
 
     }
@@ -801,7 +774,7 @@ public:
 
             //move to leaf node
             cursor = BPlusTreeRangeSearch(cursor, data); // TODO: I think I don't have to change this function
-            cout << "adding new item " << data;
+            if (DEBUG) cout << "adding new item " << data;
 
 
             //overflow check
@@ -809,15 +782,8 @@ public:
                 //item insert and rearrange
 
                 cursor->item = run_insert(cursor->item, data, cursor->size, run_length, inserted_index);
-                //print all items in cursor node
-                cout << "cursor normal case: ";
-                for (int i = 0; i < cursor->size; i++) {
-                    cout << cursor->item[i] << " ";
-                }
 
-                cout << cursor->size << endl;
                 if (inserted_index >= cursor->size - 2 && cursor->next != nullptr) {
-                    cout << "merging items" << endl;
                     // merge only if we added some new item at the end of the node
                     merge_items_next(cursor->item, cursor->next, cursor->size);
                 }
@@ -826,7 +792,6 @@ public:
                     // this leads to error if the first item of the node is not a gap run
                     // so we know that we already removed the gap run and now we have to check if the prev node last item
                     // graph position is the same as the new run graph position
-                    cout << "merging items" << endl;
                     // merge only if we added some new item at the end of the node
                     merge_items_prev(cursor->item, cursor->prev, cursor->size);
                 }
@@ -858,12 +823,12 @@ public:
 
                 if (cursor->next != nullptr) {
                     if (cursor->next->size < std::ceil(this->degree / 2)) {
-                        cout << "normal underflow on the next node " << endl;
+                        if (DEBUG) cout << "normal underflow on the next node " << endl;
                         underflow(cursor->next);
                     }
                 }
                 if (cursor->size < std::ceil(this->degree / 2)) {
-                    cout << "normal underflow on the cursor node" << endl;
+                    if (DEBUG) cout << "normal underflow on the cursor node" << endl;
                     underflow(cursor);
                 }
 
@@ -881,16 +846,12 @@ public:
 
                 item_copy = run_insert(item_copy, data, item_copy_size, run_length, inserted_index);
                 // print all item copy items
-                cout << "item_copy: ";
-                for (int i = 0; i < item_copy_size; i++) {
-                    cout << item_copy[i] << " ";
-                }
-                cout << "inserted index " << inserted_index << endl;
+
                 if (inserted_index >= cursor->size - 2 && cursor->next != nullptr) {
 
 
                     // merge only if we added some new item at the end of the node
-                    cout << "merging items" << endl;
+                    if (DEBUG) cout << "merging items" << endl;
                     merge_items_next(item_copy, cursor->next, item_copy_size);
                     // print all items in cursor->next node
                     // check for underflow on the next node
@@ -902,13 +863,9 @@ public:
 //                    }
                 }
                 if (inserted_index == 0 && cursor->prev != nullptr) {
-                    cout << "merging items prev here" << endl;
+                    if (DEBUG) cout << "merging items prev here" << endl;
                     merge_items_prev(item_copy, cursor->prev, item_copy_size);
                     // print all item_copy items
-                    cout << "item_copy: ";
-                    for (int i = 0; i < item_copy_size; i++) {
-                        cout << item_copy[i] << " ";
-                    }
                 }
 
                 // Have to check if this was an overflow case or not
@@ -1037,15 +994,7 @@ public:
 
                         this->root = Newparent;
                     } else {//if there already have parent node
-                        cout << "inserting to existing parent" << endl;
-                        // print all items in cursor parent node
-                        cout << "cursor parent: ";
-                        cout << cursor->parent->size << endl;
-                        for (int i = 0; i < cursor->parent->size; i++) {
-                            cout << cursor->parent->item[i] << " ";
-                        }
-
-
+                        if (DEBUG) cout << "inserting to existing parent" << endl;
                         InsertPar(cursor->parent, Newnode, paritem);
                     }
 
@@ -1053,12 +1002,12 @@ public:
                 //TODO: do we need a check for the prev node? I don't think so
                 if (cursor->next != nullptr) {
                     if (cursor->next->size < std::ceil(this->degree / 2)) {
-                        cout << "underflow on the next node" << endl;
+                        if (DEBUG) cout << "underflow on the next node" << endl;
                         underflow(cursor->next);
                     }
                 }
                 if (cursor->size < std::ceil(this->degree / 2)) {
-                    cout << "underflow on the cursor node" << endl;
+                    if (DEBUG) cout << "underflow on the cursor node" << endl;
                     underflow(cursor);
                 }
 
@@ -1261,15 +1210,9 @@ public:
         Node<T> *remover = node;
         Node<T> *cursor = par;
         T target = cursor->item[index];
-        cout << "removing " << target << " from parent" << cursor->item[0] << endl;
 
         if (cursor == this->root && cursor->size == 1) {
             Node<T> *remainingChild = (remover == cursor->children[0]) ? cursor->children[1] : cursor->children[0];
-            // print items in remaining child
-            cout << "remaining child: ";
-            for (int i = 0; i < remainingChild->size; i++) {
-                cout << remainingChild->item[i] << " ";
-            }
 
             // Clean up the node to remove
             clear(remover);
@@ -1283,7 +1226,6 @@ public:
             delete[] cursor->children; // Free the array of child pointers
             delete cursor; // Free the parent node itself
             // print the new root and its parent
-            cout << "new root: ";
 
             return;
 
@@ -1356,12 +1298,6 @@ public:
             }
             cursor->children[cursor->size] = nullptr;
             cursor->size--;
-
-            // print all items in cursor node
-            cout << "cursor normal case: ";
-            for (int i = 0; i < cursor->size; i++) {
-                cout << cursor->item[i] << " ";
-            }
 
             //underflow check
             if (cursor == this->root) {
@@ -1529,6 +1465,28 @@ public:
             if (!cursor->is_leaf) {
                 for (int i = 0; i < cursor->size + 1; ++i) {
                     print(cursor->children[i]);
+                }
+            }
+        }
+    }
+
+    void bpt_check_items() {
+        check_items(this->root);
+    }
+
+    void check_items(Node<T> *cursor) {
+        if (cursor != NULL) {
+            if (cursor->is_leaf) {
+                for (int i = 0; i < cursor->size - 1 ; i++) {
+                    if (cursor->item[i].graph_position == cursor->item[i + 1].graph_position) {
+                        cout << "Error: two adjacent items have the same graph position" << endl;
+                        cout << "graph position: " << cursor->item[i].graph_position.value << endl;
+                        cout << "start position: " << cursor->item[i].start_position << " " << cursor->item[i+1].start_position << endl;
+                    }
+                }
+            } else {
+                for (int i = 0; i < cursor->size + 1; ++i) {
+                    check_items(cursor->children[i]);
                 }
             }
         }
