@@ -249,7 +249,7 @@ void kmers_to_bplustree(r_index<> &idx, BPlusTree<Run> &bptree,
         if (it != index.end()) {
             Run run = {interval.first, it->second};
             if (debug) cout << "The adding run is: " << run << " with len " << interval.second - interval.first + 1 << endl;
-            bptree.insert(run, interval.second - interval.first + 1);
+            bptree.insert(run, interval.second - interval.first + 1); // CHECK
         }
         return;
     }
@@ -362,6 +362,7 @@ int main_panindexer(int argc, char **argv) {
     // read the gbz file and store it in the gbz data structure
 
     unique_ptr<gbwtgraph::GBZ> gbz;
+    cout << "Loading the graph file" << endl;
     auto input = vg::io::VPKG::try_load_first<gbwtgraph::GBZ, gbwtgraph::GBWTGraph, HandleGraph>(graph_file);
     gbz = std::move(get<0>(input));
 
@@ -374,10 +375,13 @@ int main_panindexer(int argc, char **argv) {
 
     hash_map<kmer_type, gbwtgraph::Position> index;
 //    unique_kmers<gbwtgraph::Key64>(gbz->graph, index, 29);
+    cout << "Computing the unique kmers in the graph" << endl;
+
     unique_kmers_parallel<gbwtgraph::Key64>(gbz->graph, index, k);
     BPlusTree<Run> bptree(15); // TODO: determine the BPlusTree degree
     // reading the rindex file
 //    string index_file = "/Users/seeskand/Documents/pangenome-index/test_data/x.giraffe.ri";
+    cout << "Reading the rindex file" << endl;
     std::ifstream in(index_file);
     bool fast;
     //fast or small index?
@@ -385,9 +389,10 @@ int main_panindexer(int argc, char **argv) {
     r_index<> idx;
     idx.load(in);
 
-
-
+    cout << "Adding the kmers to the BPlusTree" << endl;
     kmers_to_bplustree(idx, bptree, index, k, {0, idx.bwt_size() - 1}, "");
+
+
 
     // print the BPlusTree
 //    bptree.bpt_print();
@@ -404,6 +409,7 @@ int main_panindexer(int argc, char **argv) {
     cout << "The size of the BWT is: " << bwt_size << endl;
 
 
+    cout << "calculating the fraction of the tag arrays covered" << endl;
     // calculating the fraction of the tag arrays covered
     for (auto it = bptree.begin(); it != bptree.end(); ++it) {
          if ((*it).graph_position.value != 0) {
@@ -416,37 +422,37 @@ int main_panindexer(int argc, char **argv) {
          }
     }
 
+
     cout << "The fraction of the tag arrays covered is: " << tag_arrays_covered << " / " << bwt_size << " = " << (double)tag_arrays_covered / bwt_size << endl;
 
 
 
 
 
+//
+//
+//    for (size_t i = 3; i < 10; i+=2){
+//        bptree.insert({i, 3}, 1);
+//        cout << "The B+ tree is: " << endl;
+//        bptree.bpt_print();
+//    }
+//    for (size_t i = 4; i < 9; i+=4){
+//        bptree.insert({i, 3}, 1);
+//        cout << "The B+ tree is: " << endl;
+//        bptree.bpt_print();
+//    }
+//
+//    for (size_t i = 10; i < 30; i+=2){
+//        bptree.insert({i, 3}, 1);
+//        cout << "The B+ tree is: " << endl;
+//        bptree.bpt_print();
+//    }
+//    for (size_t i = 29; i > 12; i-=2){
+//        bptree.insert({i, 3}, 1);
+//        cout << "The B+ tree is: " << endl;
+//        bptree.bpt_print();
+//    }
 
-    /*
-     * Here is a test for the BPlusTree
-    for (size_t i = 3; i < 10; i+=2){
-        bptree.insert({i, 3}, 1);
-        cout << "The B+ tree is: " << endl;
-        bptree.bpt_print();
-    }
-    for (size_t i = 4; i < 9; i+=4){
-        bptree.insert({i, 3}, 1);
-        cout << "The B+ tree is: " << endl;
-        bptree.bpt_print();
-    }
-
-    for (size_t i = 10; i < 30; i+=2){
-        bptree.insert({i, 3}, 1);
-        cout << "The B+ tree is: " << endl;
-        bptree.bpt_print();
-    }
-    for (size_t i = 29; i > 12; i-=2){
-        bptree.insert({i, 3}, 1);
-        cout << "The B+ tree is: " << endl;
-        bptree.bpt_print();
-    }
-      */
 
 
 

@@ -43,6 +43,10 @@ public:
         this->prev = nullptr; // TODO: check all the instances where we find the previous node searching the parent node
 
     }
+    ~Node() {
+        delete[] item;
+        delete[] children;
+    }
 };
 
 template<typename T>
@@ -100,14 +104,46 @@ public:
         } else {
             Node<T> *cursor = node; // cursor finding key
 
+
+
+
+//            while (!cursor->is_leaf) {
+//                bool found = false;
+//                for (int i = 0; i < cursor->size; i++) {
+//                    if (key < cursor->item[i]) {
+//                        cursor = cursor->children[i];
+//                        if (cursor == nullptr) {
+//                            cout << "We hit a null pointer in children of a node" << endl;
+//                        }
+//                        found = true;
+//                        break;
+//                    }
+//                }
+//                if (!found) {
+//                    cursor = cursor->children[cursor->size];
+//                    if (cursor == nullptr) {
+//                        cout << "We hit a null pointer in children of a node" << endl;
+//                    }
+//                }
+//            }
+
+
             while (!cursor->is_leaf) { // until cusor pointer arrive leaf
                 for (int i = 0; i < cursor->size; i++) { //in this index node, find what we want key
                     if (key < cursor->item[i]) { //find some range, and let find their child also.
+
                         cursor = cursor->children[i];
+                        if (cursor == nullptr){
+                            cout << "We hitted a null pointer in children of a node" << endl;
+                        }
+
                         break;
                     }
                     if (i == (cursor->size) - 1) {
                         cursor = cursor->children[i + 1];
+                        if (cursor == nullptr){
+                            cout << "We hitted a null pointer in children of a node" << endl;
+                        }
                         break;
                     }
                 }
@@ -190,9 +226,11 @@ public:
             }
         }
         inserted_index = index;
+        cout << len << " " << index << endl;
+        cout << new_run << endl;
 
         if (DEBUG)
-            cerr << "++++" << new_run << " " << len << " " << index << "   " << arr[index - 1] << arr[index + 1]
+            cout << "++++" << new_run << " " << len << " " << index << "   " << arr[index - 1] << arr[index + 1]
                  << endl;
 
 
@@ -200,6 +238,7 @@ public:
         // the run should be after a gap run, otherwise it is a redundant run
         if (index != 0 && (arr[index - 1].graph_position.value != 0) && (new_run.graph_position.value != 0)) {
             cerr << "Error: the new run is not inserted correctly. The new run cannot inserted in another run!" << endl;
+            cout << "Error: the new run is not inserted correctly. The new run cannot inserted in another run!" << endl;
             return arr;
         }
 
@@ -213,26 +252,59 @@ public:
             return arr;
         }
             // first case is when the new_run doesn't hit previous run or the next run
-        else if ((new_run.start_position > arr[index - 1].start_position || index == 0) &&
-                 (new_run.start_position + run_length < arr[index].start_position || index == len)) {
+        else if ((index == 0 || new_run.start_position > arr[index - 1].start_position ) &&
+                 (index == len || new_run.start_position + run_length < arr[index].start_position)) {
+            if (index == 0){
+                // there is no index - 1 item and we don't hit the next item in thea array
+                // just have to move the array 2 items to the right and insert the new run and the gap
+                for (size_t i = len + 1; i > 1; i--) {
+                    arr[i] = arr[i - 2];
+                }
+                arr[0] = new_run;
+                arr[1] = create_gap(new_run.start_position + run_length);
+                len += 2;
 
-            if (DEBUG) cout << "insert run case 1" << endl;
-            for (size_t i = len + 1; i > index; i--) {
-                arr[i] = arr[i - 2];
+
+            } else if (index == len){
+                arr[index] = new_run;
+                arr[index + 1] = create_gap(new_run.start_position + run_length);
+                len += 2;
+            } else {
+                for (size_t i = len + 1; i > index; i--) {
+                    arr[i] = arr[i - 2];
+                }
+                arr[index] = new_run;
+                arr[index + 1] = create_gap(new_run.start_position + run_length);
+                len += 2;
+                inserted_index = index;
+
             }
 
-            arr[index] = new_run;
-            arr[index + 1] = create_gap(new_run.start_position + run_length);
-            len += 2;
-            inserted_index = index;
+
+            if (DEBUG) cout << "insert run case 1" << endl;
+
         }
 
             // second case is when we hit the previous run end point and not the next run starting point
-        else if (new_run.start_position == arr[index - 1].start_position &&
-                 ((new_run.start_position + run_length < arr[index].start_position) || index == len)) {
+        else if (index != 0 && new_run.start_position == arr[index - 1].start_position &&
+                 ((index == len || new_run.start_position + run_length < arr[index].start_position))) {
             if (DEBUG) cout << "insert run case 2" << endl;
+            // the case that index = 1
+            if (index == 1){
+                // got to add the new run and the gap run and remove the gap run and let the merge functions handle the rest
+                arr[index - 1] = new_run;
+                inserted_index = index - 1;
+                for (size_t i = len; i > index; i--) {
+                    arr[i] = arr[i - 1];
+                }
+                arr[index] = create_gap(new_run.start_position + run_length);
+                len++;
+
+            }
+
+
             // two cases here, first being the new run graph position not be the same as the previous run graph position
-            if (new_run.graph_position.value != arr[index - 2].graph_position.value) {
+            else if (new_run.graph_position.value != arr[index - 2].graph_position.value) {
                 if (DEBUG) cout << "insert run case 2.1" << endl;
                 // in this case have to remove the gap run and insert the new run in its place and then add a gap for the new run
                 arr[index - 1] = new_run;
@@ -254,7 +326,7 @@ public:
 
         }
             // third case, when we hit the next run starting point but not the previous one
-        else if ((new_run.start_position > arr[index - 1].start_position || index == 0) &&
+        else if ((index == 0 || new_run.start_position > arr[index - 1].start_position) &&
                  new_run.start_position + run_length == arr[index].start_position) {
             if (DEBUG) cout << "insert run case 3" << endl;
             // two cases here, first being the new run graph_position not be the same as the next run graph_position
@@ -276,10 +348,38 @@ public:
                 inserted_index = index;
             }
         }
+
+
+
+
             // forth case, which is when we hit both runs from both sides
         else if (new_run.start_position == arr[index - 1].start_position &&
                  new_run.start_position + run_length == arr[index].start_position) {
             if (DEBUG) cout << "insert run case 4" << endl;
+
+            // if index = 1 then we do not have to check for the index-2 run
+            if (index == 1){
+                if (DEBUG) cout << "insert run case 4.0" << endl;
+                // two cases here too! first being the new run graph_position not be the same as the next run graph_position
+                if (new_run.graph_position.value != arr[index].graph_position.value) {
+                    if (DEBUG) cout << "insert run case 4.0.1" << endl;
+                    // in this case we don't need to add a gap after adding the new run
+                    arr[index - 1] = new_run;
+                    inserted_index = index - 1;
+                }
+                    // the other case is when the new run graph_position is the same as the next non-gap run graph_position
+                else if (new_run.graph_position.value == arr[index].graph_position.value) {
+                    if (DEBUG) cout << "insert run case 4.0.2" << endl;
+                    // in this case we just have to change the starting position of the next non-gap run
+                    arr[index].start_position = new_run.start_position;
+                    inserted_index = index;
+                    for (size_t i = index - 1; i < len - 1; i++) {
+                        arr[i] = arr[i + 1];
+                    }
+                    len--;
+                }
+            }
+
             // two cases here, first being the new run graph_position not be the same as the previous run graph_position
             if ((new_run.graph_position.value != arr[index - 2].graph_position.value) || index == 1) {
                 if (DEBUG) cout << "insert run case 4.1" << endl;
@@ -309,11 +409,7 @@ public:
                 // two cases here too! first being the new run graph_position not be the same as the next run graph_position
                 if (new_run.graph_position.value != arr[index].graph_position.value) {
                     if (DEBUG) cout << "insert run case 4.2.1" << endl;
-                    //1-3 4-0   4-3 6-0   6-4 7-0 //TODO
 
-                    // 1-3 6-4 7-0
-                    // in this case we don't merge with the next run, but we need to merge with the previous run
-//                    arr[index - 1] = new_run;
                     // just remove the index run
                     for (size_t i = index - 1; i < len - 1; i++) {
                         arr[i] = arr[i + 1];
@@ -424,6 +520,7 @@ public:
             }
             Newnode->children[Newnode->size] = child_copy[cursor->size + Newnode->size + 1];
             Newnode->children[Newnode->size]->parent = Newnode;
+            Newnode->next = child_copy[cursor->size + Newnode->size + 1]; // CHANGE MEM LEAK
 
             T paritem = item_copy[this->degree / 2];
 
@@ -461,9 +558,25 @@ public:
     void merge_items_next(T *arr, Node<T> *next_node, size_t &len) {
         if (next_node != nullptr) {
             if (next_node->item[0].start_position < arr[len - 1].start_position) {
-                cerr << "Error: this run overlaps with the next run!" << endl;
-                cerr << "Changing the run length to the maximum it can be before overlapping" << endl;
-                len--;
+                if (len != 1 && next_node->item[0].graph_position == arr[len - 2].graph_position) {
+                    cerr << "Error: this run overlaps with the next run!!" << endl;
+                    cerr << "Changing the run length to the maximum it can be before overlapping!" << endl;
+                    for (int i = 0; i < next_node->size - 1; i++) {
+                        next_node->item[i] = next_node->item[i + 1];
+                    }
+                    next_node->children[next_node->size] = next_node->children[next_node->size +1]; // TODO: check this line
+                    next_node->children[next_node->size + 1] = nullptr;
+                    next_node->size--;
+                    len--;
+                } else {
+                    cerr << "Error: this run overlaps with the next run!" << endl;
+                    cerr << "Changing the run length to the maximum it can be before overlapping" << endl;
+                    cerr << arr[len-1] << " " << next_node->item[0] << endl;
+                    if (DEBUG) cout << arr[len-1] << " " << next_node->item[0] << endl;
+                    len--;
+//                    arr[len - 1].start_position = next_node->item[0].start_position;
+                }
+
             } else {
                 // if we hit the next node
                 if (next_node->item[0].start_position == arr[len - 1].start_position) {
@@ -473,10 +586,11 @@ public:
                         for (int i = 0; i < next_node->size - 1; i++) {
                             next_node->item[i] = next_node->item[i + 1];
                         }
-                        next_node->size--;
+
                         next_node->children[next_node->size] = next_node->children[next_node->size +
                                                                                    1]; // TODO: check this line
                         next_node->children[next_node->size + 1] = nullptr;
+                        next_node->size--;
                         len--;
                     } else {
                         // in this case we don't want the gap run, so just decrease the len
@@ -679,15 +793,20 @@ public:
                     //parent property edit
                     Removepar(rightsibling, right - 1, cursor->parent);
 
-                    for (int i = 0; i < rightsibling->size; i++) {
-                        rightsibling->item[i] = 0;
-                        rightsibling->children[i] = nullptr;
-                    }
-                    rightsibling->children[rightsibling->size] = nullptr;
+                    // if we didn't already deleted this in the removepar function TODO: maybe comment all this
+//                    if (rightsibling != nullptr){
+//                        for (int i = 0; i < rightsibling->size; i++) {
+//                            rightsibling->item[i] = 0;
+//                            rightsibling->children[i] = nullptr;
+//                        }
+//                        rightsibling->children[rightsibling->size] = nullptr;
+//
+////                        delete[] rightsibling->item;
+////                        delete[] rightsibling->children;
+//                        delete rightsibling;
+//
+//                    }
 
-                    delete[] rightsibling->item;
-                    delete[] rightsibling->children;
-                    delete rightsibling;
                     handled = true;
 
                 }
@@ -702,7 +821,7 @@ public:
 
     // this function merge two nodes together, we suppose that all the checks (can get merged) are done before calling this function
     void
-    merge_nodes(Node<T> *leftsibling, Node<T> *cursor) { // TODO: what if the parents are not the same for the two nodes
+    merge_nodes(Node<T> *leftsibling, Node<T> *cursor) { // TODO: what if the parents are not the same for the two nodes: we dont care? or we should care?
 
         if (DEBUG) cout << "merging nodes" << endl;
         if (DEBUG) cout << cursor->size << endl;
@@ -765,16 +884,20 @@ public:
             this->root = new Node<T>(this->degree);
             this->root->is_leaf = true;
             this->root->item[0] = data;
-            this->root->size = 1; //
-            insert(create_gap(data.start_position + run_length), 0); // TODO: changing the run length to 1?
+            this->root->item[1] = create_gap(data.start_position + run_length);
+            this->root->size = 2; //
+
+//            insert(create_gap(data.start_position + run_length), 0);
 //            this->root->size++;
         } else { //if the tree has at least one node
             Node<T> *cursor = this->root;
             size_t inserted_index;
 
             //move to leaf node
-            cursor = BPlusTreeRangeSearch(cursor, data); // TODO: I think I don't have to change this function
+            cursor = BPlusTreeRangeSearch(cursor, data);
             if (DEBUG) cout << "adding new item " << data;
+            // hold the current cursor node size
+            size_t cursor_size_prev = cursor->size;
 
 
             //overflow check
@@ -782,6 +905,13 @@ public:
                 //item insert and rearrange
 
                 cursor->item = run_insert(cursor->item, data, cursor->size, run_length, inserted_index);
+                // print all items in cursor node
+                    cout << "cursor: ";
+                    for (int i = 0; i < cursor->size; i++) {
+                        cout << cursor->item[i] << " ";
+                    }
+                    cout << '\n';
+
 
                 if (inserted_index >= cursor->size - 2 && cursor->next != nullptr) {
                     // merge only if we added some new item at the end of the node
@@ -819,7 +949,8 @@ public:
 //                        underflow(cursor);
 //                    }
 //                }
-
+                cursor->children[cursor->size] = cursor->children[cursor_size_prev];
+                cursor->children[cursor_size_prev] = nullptr;
 
                 if (cursor->next != nullptr) {
                     if (cursor->next->size < std::ceil(this->degree / 2)) {
@@ -832,10 +963,11 @@ public:
                     underflow(cursor);
                 }
 
+
                 //edit pointer(next node)
-                cursor->children[cursor->size] = cursor->children[cursor->size - 1];
-                cursor->children[cursor->size - 1] = nullptr;
-            } else { //overflow case // TODO: this is not a 100% overflow case, merging the Runs could results in not overflowing
+//                cursor->children[cursor->size] = cursor->children[cursor_size_prev];
+//                cursor->children[cursor_size_prev] = nullptr;
+            } else { //overflow case
 
                 //copy item
                 T *item_copy = new T[cursor->size + 2];
@@ -876,6 +1008,10 @@ public:
                     for (int i = 0; i < item_copy_size; i++) {
                         cursor->item[i] = item_copy[i];
                     }
+                    cursor->children[cursor->size] = cursor->children[cursor_size_prev];
+                    cursor->children[cursor_size_prev] = nullptr;
+                    delete[] item_copy;
+
                 } else {
 
                     // still we might have a non-overflow case
@@ -967,8 +1103,9 @@ public:
 
 
                     cursor->children[cursor->size] = Newnode;
-                    Newnode->children[Newnode->size] = cursor->children[this->degree - 1];
-                    cursor->children[this->degree - 1] = nullptr;
+//                    Newnode->children[Newnode->size] = cursor->children[this->degree - 1]; // CHANGE MEM LEAK
+                    Newnode->children[Newnode->size] = cursor->children[cursor_size_prev];
+                    cursor->children[cursor_size_prev] = nullptr;
                     if (cursor->next != nullptr) {
                         cursor->next->prev = Newnode;
                     }
@@ -1212,19 +1349,37 @@ public:
         T target = cursor->item[index];
 
         if (cursor == this->root && cursor->size == 1) {
+            cout << "remove parent root case" << endl;
             Node<T> *remainingChild = (remover == cursor->children[0]) ? cursor->children[1] : cursor->children[0];
 
             // Clean up the node to remove
-            clear(remover);
+//            clear(remover);
+//            delete[] remover->item;
+//            remover->item = nullptr;
+//            delete[] remover->children;
+//            remover->children = nullptr;
+
+//            this->root = cursor->children[1];
+//            this->root->parent = nullptr;
+//            delete[] cursor->item;
+//
+//            delete[] cursor->children;
+//            delete cursor;
 
             // Set the remaining child as the new root
             this->root = remainingChild;
-            this->root->parent = nullptr; // It's important to disconnect the new root from its former parent
+            if (this->root) {
+                this->root->parent = nullptr; // It's important to disconnect the new root from its former parent
+            }
 
             // Clean up the old root node
-            delete[] cursor->item;   // Free the array of items
-            delete[] cursor->children; // Free the array of child pointers
+//            delete[] cursor->item;   // Free the array of items
+//            cursor->item = nullptr;
+//            delete[] cursor->children; // Free the array of child pointers
             delete cursor; // Free the parent node itself
+            cursor = nullptr;
+            delete remover;
+            remover = nullptr;
             // print the new root and its parent
 
             return;
@@ -1297,7 +1452,11 @@ public:
                 cursor->children[i] = cursor->children[i + 1];
             }
             cursor->children[cursor->size] = nullptr;
+            cursor->next = nullptr; // Change MEM LEAK
             cursor->size--;
+            delete remover; // Automatically calls the destructor to free item and children // Change MEM LEAK
+            remover = nullptr; // Change MEM LEAK
+
 
             //underflow check
             if (cursor == this->root) {
@@ -1379,6 +1538,7 @@ public:
                             rightsibling->children[i] = rightsibling->children[i + 1];
                         }
                         rightsibling->children[rightsibling->size] = nullptr;
+                        rightsibling->next = nullptr; // Change MEM LEAK
 
                         cursor->size++;
                         rightsibling->size--;
@@ -1442,11 +1602,15 @@ public:
             if (!cursor->is_leaf) {
                 for (int i = 0; i <= cursor->size; i++) {
                     clear(cursor->children[i]);
+                    cursor->children[i] = nullptr;
                 }
             }
             delete[] cursor->item;
+            cursor->item = nullptr;
             delete[] cursor->children;
+            cursor->children = nullptr;
             delete cursor;
+            cursor = nullptr;
         }
     }
 
