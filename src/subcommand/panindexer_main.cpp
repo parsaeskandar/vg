@@ -396,7 +396,7 @@ int main_panindexer(int argc, char **argv) {
 
     // print the BPlusTree
 //    bptree.bpt_print();
-//    bptree.bpt_check_items();
+    bptree.bpt_check_items();
 
     // computing some statistics
     auto unique_kmers_size = index.size();
@@ -424,6 +424,8 @@ int main_panindexer(int argc, char **argv) {
 
 
     cout << "The fraction of the tag arrays covered is: " << tag_arrays_covered << " / " << bwt_size << " = " << (double)tag_arrays_covered / bwt_size << endl;
+
+
 
 
 
