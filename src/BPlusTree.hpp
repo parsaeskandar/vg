@@ -241,7 +241,9 @@ public:
 
         // the run should be after a gap run, otherwise it is a redundant run
         if (index != 0 && (arr[index - 1].graph_position.value != 0) && (new_run.graph_position.value != 0)) {
-            cerr << "Error: the new run is not inserted correctly. The new run cannot inserted in another run!" << endl;
+            if (DEBUG)
+                cerr << "Error: the new run is not inserted correctly. The new run cannot inserted in another run!"
+                     << endl;
 //            cout << "Error: the new run is not inserted correctly. The new run cannot inserted in another run!" << endl;
             return arr;
         }
@@ -435,13 +437,13 @@ public:
                 }
             }
         } else {
-            cerr << "Error: the new run is not inserted correctly" << endl;
+            if (DEBUG) cerr << "Error: the new run is not inserted correctly" << endl;
         }
         return arr;
     }
 
     Node<T> **child_insert(Node<T> **child_arr, Node<T> *child, int len, int index) {
-        for (int i = len + 1; i > index; i--) {
+        for (int i = len; i > index; i--) {
             child_arr[i] = child_arr[i - 1];
         }
         child_arr[index] = child;
@@ -485,6 +487,7 @@ public:
             cursor = child_item_insert(cursor, data, child);
             cursor->size++;
         } else {//overflow
+
             //make new node
             auto *Newnode = new Node<T>(this->degree);
             Newnode->parent = cursor->parent;
@@ -518,6 +521,7 @@ public:
             }
             cursor->children[cursor->size] = child_copy[cursor->size];
 
+
             for (int i = 0; i < Newnode->size; i++) {
                 Newnode->item[i] = item_copy[cursor->size + i + 1];
                 Newnode->children[i] = child_copy[cursor->size + i + 1];
@@ -525,7 +529,7 @@ public:
             }
             Newnode->children[Newnode->size] = child_copy[cursor->size + Newnode->size + 1];
             Newnode->children[Newnode->size]->parent = Newnode;
-            Newnode->next = child_copy[cursor->size + Newnode->size + 1]; // CHANGE MEM LEAK
+//            Newnode->next = child_copy[cursor->size + Newnode->size + 1]; // CHANGE MEM LEAK
 
             T paritem = item_copy[this->degree / 2];
 
@@ -564,20 +568,20 @@ public:
         if (next_node != nullptr) {
             if (next_node->item[0].start_position < arr[len - 1].start_position) {
                 if (len != 1 && next_node->item[0].graph_position == arr[len - 2].graph_position) {
-                    cerr << "Error: this run overlaps with the next run!!" << endl;
-                    cerr << "Changing the run length to the maximum it can be before overlapping!" << endl;
+                    if (DEBUG) cerr << "Error: this run overlaps with the next run!!" << endl;
+                    if (DEBUG) cerr << "Changing the run length to the maximum it can be before overlapping!" << endl;
                     for (int i = 0; i < next_node->size - 1; i++) {
                         next_node->item[i] = next_node->item[i + 1];
                     }
-                    next_node->children[next_node->size] = next_node->children[next_node->size +
-                                                                               1]; // TODO: check this line
-                    next_node->children[next_node->size + 1] = nullptr;
+                    next_node->children[next_node->size -
+                                        1] = next_node->children[next_node->size]; // TODO: check this line
+                    next_node->children[next_node->size] = nullptr;
                     next_node->size--;
                     len--;
                 } else {
-                    cerr << "Error: this run overlaps with the next run!" << endl;
-                    cerr << "Changing the run length to the maximum it can be before overlapping" << endl;
-                    cerr << arr[len - 1] << " " << next_node->item[0] << endl;
+                    if (DEBUG) cerr << "Error: this run overlaps with the next run!" << endl;
+                    if (DEBUG) cerr << "Changing the run length to the maximum it can be before overlapping" << endl;
+                    if (DEBUG) cerr << arr[len - 1] << " " << next_node->item[0] << endl;
                     if (DEBUG) cout << arr[len - 1] << " " << next_node->item[0] << endl;
                     len--;
 //                    arr[len - 1].start_position = next_node->item[0].start_position;
@@ -730,6 +734,9 @@ public:
                         rightsibling->children[rightsibling->size + 1] = nullptr;
 
                         //parent property edit
+                        // print right value and first item in right sibling
+                        cout << right << " " << rightsibling->item[0] << endl;
+
                         cursor->parent->item[right - 1] = rightsibling->item[0];
 
                         handled = true;
@@ -876,7 +883,7 @@ public:
                 }
 
             } else {
-                cerr << "Error: the underflow function called incorrectly! " << endl;
+                if (DEBUG) cerr << "Error: the underflow function called incorrectly! " << endl;
             }
 
         }
@@ -962,6 +969,28 @@ public:
             if (DEBUG) cout << "adding new item (before search)" << data;
             //move to leaf node
             cursor = BPlusTreeRangeSearch(cursor, data);
+
+            // print everything accesible from cursor node
+//            cout << "cursor: ";
+//            for (int i = 0; i < cursor->size; i++) {
+//                cout << cursor->item[i] << " ";
+//            }
+//            cout << '\n';
+//            if (cursor->parent != nullptr) cout << "cursor parent size: " << cursor->parent->size << endl;
+//            cout << "cursor next size if have: ";
+//            if (cursor->next != nullptr) {
+//                cout << cursor->next->size << endl;
+//            } else {
+//                cout << "null" << endl;
+//            }
+//            cout << "cursor prev size if have: ";
+//            if (cursor->prev != nullptr) {
+//                cout << cursor->prev->size << endl;
+//            } else {
+//                cout << "null" << endl;
+//            }
+
+
             // hold the current cursor node size
             size_t cursor_size_prev = cursor->size;
 
@@ -972,14 +1001,13 @@ public:
 
                 cursor->item = run_insert(cursor->item, data, cursor->size, run_length, inserted_index);
                 // print all items in cursor node
-                if (DEBUG){
+                if (DEBUG) {
                     cout << "cursor: ";
                     for (int i = 0; i < cursor->size; i++) {
                         cout << cursor->item[i] << " ";
                     }
                     cout << '\n';
                 }
-
 
 
                 if (inserted_index >= cursor->size - 2 && cursor->next != nullptr) {
@@ -1591,12 +1619,11 @@ public:
                     }
 
                     //insert and rearrange at child
-                    child_insert(child_temp, leftsibling->children[leftsibling->size], cursor->size, 0);
+                    child_insert(child_temp, leftsibling->children[leftsibling->size], cursor->size + 1, 0);
                     cursor->size++;
 
 
-
-                    for (int i = 0; i < cursor->size + 2; i++) {
+                    for (int i = 0; i < cursor->size + 1; i++) {
                         cursor->children[i] = child_temp[i];
                     }
                     delete[] child_temp;
