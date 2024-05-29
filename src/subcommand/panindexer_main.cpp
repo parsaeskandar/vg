@@ -17,8 +17,9 @@
 #include "../gbwt_helper.hpp"
 #include "../index_registry.hpp"
 #include <gbwtgraph/index.h>
-#include <../BPlusTree.hpp>
-
+#include <iostream>
+//#include <../BPlusTree.hpp>
+#include <../bplus_tree.hpp>
 
 #include <string>
 
@@ -234,7 +235,7 @@ struct Run {
 
 // this function iterate over all of the kmers in the r-index and add the runs to the BPlusTree recursively
 // TODO: make this function parallel
-void kmers_to_bplustree(r_index<> &idx, BPlusTree<Run> &bptree,
+void kmers_to_bplustree(r_index<> &idx, BplusTree<Run> &bptree,
                         vg::hash_map<gbwtgraph::Key64::value_type, gbwtgraph::Position> &index, size_t k,
                         range_t interval, const string current_kmer) {
     if (current_kmer.length() == k && interval.first <= interval.second) {
@@ -248,13 +249,14 @@ void kmers_to_bplustree(r_index<> &idx, BPlusTree<Run> &bptree,
         auto it = index.find(kmer_key.get_key());
         if (it != index.end()) {
             Run run = {interval.first, it->second};
-            if (debug) cout << "The adding run is: " << run << " with len " << interval.second - interval.first + 1 << endl;
+            if (debug)
+                cout << "The adding run is: " << run << " with len " << interval.second - interval.first + 1 << endl;
             bptree.insert(run, interval.second - interval.first + 1); // CHECK
         }
         return;
     }
 
-    for (char base: { 'A', 'C', 'G', 'T' }){
+    for (char base: {'A', 'C', 'G', 'T'}) {
 
         if (interval.first <= interval.second) {
             kmers_to_bplustree(idx, bptree, index, k, idx.LF(interval, base), base + current_kmer);
@@ -262,9 +264,50 @@ void kmers_to_bplustree(r_index<> &idx, BPlusTree<Run> &bptree,
     }
 
 
+}
+//
+//
+Run generate_random_run() {
+    static std::mt19937_64 rng(std::random_device{}());
+    static std::uniform_int_distribution<size_t> pos_dist(1, 10000); // Adjust range as needed
+    static std::uniform_int_distribution<uint64_t> graph_pos_dist(1, 1000); // Adjust range as needed
 
+    Run run;
+    run.start_position = pos_dist(rng);
+    vg::pos_t pos{graph_pos_dist(rng), false, 10};
+    run.graph_position = gbwtgraph::Position::encode(pos);
+    return run;
+}
 
+// Function to perform a randomized test on BPlusTree
+void randomized_test_bplustree(int num_tests) {
+    BplusTree<Run> bptree(15); // Adjust the degree of BPlusTree as needed
+    BplusTree<Run> bptree2(num_tests + 10); // Adjust the degree of BPlusTree as needed
 
+    // Insert random Run objects into the BPlusTree
+    for (int i = 0; i < num_tests; ++i) {
+        Run run = generate_random_run();
+        size_t run_length = 5; // Fixed run length; adjust if necessary
+        std::cout << "Inserting Run: " << run << " with length " << run_length << std::endl;
+        bptree.insert(run, run_length);
+    }
+
+    // Check the integrity of the BPlusTree
+//    bptree.bpt_check_items();
+
+    // Additional checks to ensure the tree is structured correctly
+    // For example: ensure items are in sorted order, no duplicates, etc.
+    auto it = bptree.begin();
+    auto prev_it = it;
+    if (it != bptree.end()) ++it;
+    while (it != bptree.end()) {
+        cout << "Checking " << *prev_it << " and " << *it << endl;
+        assert((*prev_it).start_position <= (*it).start_position);
+        ++prev_it;
+        ++it;
+    }
+
+    std::cout << "Randomized test completed successfully!" << std::endl;
 }
 
 
@@ -284,10 +327,10 @@ int main_panindexer(int argc, char **argv) {
     while (true) {
         static struct option long_options[] =
                 {
-                        {"graph",       required_argument, 0, 'g'},
+                        {"graph", required_argument,       0, 'g'},
                         {"kmer-length", required_argument, 0, 'k'},
-                        {"index",       required_argument, 0, 'i'},
-                        {"threads",     required_argument, 0, 't'},
+                        {"index", required_argument,       0, 'i'},
+                        {"threads", required_argument,     0, 't'},
                         {0, 0,                             0, 0}
                 };
         int option_index = 0;
@@ -371,6 +414,68 @@ int main_panindexer(int argc, char **argv) {
     auto space_efficient_counting = false;
 
 
+
+//    BplusTree<Run> bptree(5);
+
+//        for (size_t i = 3; i < 10; i+=2){
+//        bptree.insert({i, 3}, 1);
+//        cout << "The B+ tree is: " << endl;
+//        bptree.print_whole();
+//    }
+//    for (size_t i = 4; i < 9; i+=4){
+//        bptree.insert({i, 3}, 1);
+//        cout << "The B+ tree is: " << endl;
+//        bptree.print_whole();
+//    }
+//
+//    for (size_t i = 30; i > 9; i-=2){
+//        bptree.insert({i, 3}, 1);
+//        cout << "The B+ tree is: " << endl;
+//        bptree.print_whole();
+//    }
+//    for (size_t i = 13; i < 30; i+=2){
+//        bptree.insert({i, 3}, 1);
+//        cout << "The B+ tree is: " << endl;
+//        bptree.print_whole();
+//    }
+
+
+//    for (size_t i = 10; i < 30; i+=2){
+//        bptree.insert({i, 3}, 1);
+//        cout << "The B+ tree is: " << endl;
+//        bptree.print_whole();
+//    }
+//    for (size_t i = 29; i > 12; i-=2){
+//        bptree.insert({i, 3}, 1);
+//        cout << "The B+ tree is: " << endl;
+//        bptree.print_whole();
+//    }
+
+//    bptree.insert({1,2}, 1);
+//    bptree.insert({4,5}, 1);
+////    bptree.insert({2,4}, 2);
+//    bptree.insert({7,8}, 1);
+//    bptree.insert({5,5}, 1);
+//    bptree.insert({9,5}, 1);
+//    bptree.insert({2,7}, 1);
+//    bptree.print_whole();
+
+
+//    cout << node.is_leaf() << endl;
+//    node.insert({5,2}, 2);
+//    node.print();
+//    node.insert({9,2}, 5);
+//    node.print();
+//    node.insert({7,2}, 2);
+//
+//
+//    node.print();
+
+
+
+
+
+
     typedef gbwtgraph::Key64::value_type kmer_type;
 
     hash_map<kmer_type, gbwtgraph::Position> index;
@@ -378,7 +483,7 @@ int main_panindexer(int argc, char **argv) {
     cout << "Computing the unique kmers in the graph" << endl;
 
     unique_kmers_parallel<gbwtgraph::Key64>(gbz->graph, index, k);
-    BPlusTree<Run> bptree(15); // TODO: determine the BPlusTree degree
+    BplusTree<Run> bptree(15); // TODO: determine the BPlusTree degree
     // reading the rindex file
 //    string index_file = "/Users/seeskand/Documents/pangenome-index/test_data/x.giraffe.ri";
     cout << "Reading the rindex file" << endl;
@@ -389,6 +494,11 @@ int main_panindexer(int argc, char **argv) {
     r_index<> idx;
     idx.load(in);
 
+//    int num_tests = 100000; // Number of random tests
+//    randomized_test_bplustree(num_tests);
+//    return 0;
+
+
     cout << "Adding the kmers to the BPlusTree" << endl;
     kmers_to_bplustree(idx, bptree, index, k, {0, idx.bwt_size() - 1}, "");
 
@@ -396,7 +506,6 @@ int main_panindexer(int argc, char **argv) {
 
     // print the BPlusTree
 //    bptree.bpt_print();
-    bptree.bpt_check_items();
 
     // computing some statistics
     auto unique_kmers_size = index.size();
@@ -412,18 +521,21 @@ int main_panindexer(int argc, char **argv) {
     cout << "calculating the fraction of the tag arrays covered" << endl;
     // calculating the fraction of the tag arrays covered
     for (auto it = bptree.begin(); it != bptree.end(); ++it) {
-         if ((*it).graph_position.value != 0) {
-             auto next_it = it;
-             ++next_it;
-             if (next_it != bptree.end()) {
-                 auto next_item = *next_it;
-                 tag_arrays_covered += (next_item.start_position - (*it).start_position);
-             }
-         }
+        Run current_item = *it;
+        if (current_item.graph_position.value != 0) { // Check if the current item is not a gap
+            auto next_it = it;
+            ++next_it; // Move to the next element
+            if (next_it != bptree.end()) { // Check if the next element is not the end
+                Run next_item = *next_it; // Get the next item
+                tag_arrays_covered += (next_item.start_position - current_item.start_position);
+            }
+        }
     }
 
 
-    cout << "The fraction of the tag arrays covered is: " << tag_arrays_covered << " / " << bwt_size << " = " << (double)tag_arrays_covered / bwt_size << endl;
+
+    cout << "The fraction of the tag arrays covered is: " << tag_arrays_covered << " / " << bwt_size << " = "
+         << (double) tag_arrays_covered / bwt_size << endl;
 
 
 
