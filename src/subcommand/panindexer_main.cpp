@@ -20,6 +20,10 @@
 #include <iostream>
 //#include <../BPlusTree.hpp>
 #include <../bplus_tree.hpp>
+#include <omp.h>
+#include <queue>
+#include <mutex>
+#include <condition_variable>
 
 #include <string>
 
@@ -233,6 +237,10 @@ struct Run {
 
 };
 
+
+
+
+
 // this function iterate over all of the kmers in the r-index and add the runs to the BPlusTree recursively
 // TODO: make this function parallel
 void kmers_to_bplustree(r_index<> &idx, BplusTree<Run> &bptree,
@@ -262,11 +270,94 @@ void kmers_to_bplustree(r_index<> &idx, BplusTree<Run> &bptree,
             kmers_to_bplustree(idx, bptree, index, k, idx.LF(interval, base), base + current_kmer);
         }
     }
-
-
 }
-//
-//
+
+
+
+// Thread-safe queue implementation
+template <typename T>
+class ThreadSafeQueue {
+public:
+    void push(const T& item) {
+        std::unique_lock<std::mutex> lock(mutex_);
+        queue_.push(item);
+        lock.unlock();
+        cond_var_.notify_one();
+    }
+
+    bool try_pop(T& item) {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (queue_.empty()) {
+            return false;
+        }
+        item = queue_.front();
+        queue_.pop();
+        return true;
+    }
+
+private:
+    std::queue<T> queue_;
+    std::mutex mutex_;
+    std::condition_variable cond_var_;
+};
+
+void kmers_to_bplustree_worker(r_index<> &idx, ThreadSafeQueue<std::pair<Run, size_t>> &queue,
+                               vg::hash_map<gbwtgraph::Key64::value_type, gbwtgraph::Position> &index, size_t k,
+                               range_t interval, const string &current_kmer) {
+    if (current_kmer.length() == k && interval.first <= interval.second) {
+        if (debug) {
+            cout << "The current kmer is: " << current_kmer << endl;
+            cout << "The interval is: " << interval.first << " " << interval.second << endl;
+        }
+        // creating the kmer with the key type
+        gbwtgraph::Key64 kmer_key = gbwtgraph::Key64::encode(current_kmer);
+        // check if the kmer_key is in the index and if it is add the run to the queue
+        auto it = index.find(kmer_key.get_key());
+        if (it != index.end()) {
+            Run run = {interval.first, it->second};
+            if (debug)
+                cout << "The adding run is: " << run << " with len " << interval.second - interval.first + 1 << endl;
+            queue.push({run, interval.second - interval.first + 1});
+        }
+        return;
+    }
+
+    for (char base : {'A', 'C', 'G', 'T'}) {
+        if (interval.first <= interval.second) {
+            kmers_to_bplustree_worker(idx, queue, index, k, idx.LF(interval, base), base + current_kmer);
+        }
+    }
+}
+
+void parallel_kmers_to_bplustree(r_index<> &idx, BplusTree<Run> &bptree,
+                                 vg::hash_map<gbwtgraph::Key64::value_type, gbwtgraph::Position> &index, size_t k,
+                                 range_t interval) {
+    // Thread-safe queue to collect results
+    ThreadSafeQueue<std::pair<Run, size_t>> queue;
+
+    // number of threads
+    int threads = omp_get_max_threads();
+    // splitting the starting range (0, idx.bwt_size() - 1) into parts and call the kmers_to_bplustree_worker function
+    // for each part
+    size_t part_size = (idx.bwt_size() - 1) / threads;
+#pragma omp parallel for
+    for (int i = 0; i < threads; i++) {
+        size_t start = i * part_size;
+        size_t end = (i + 1) * part_size - 1;
+        if (i == threads - 1) {
+            end = idx.bwt_size() - 1;
+        }
+        kmers_to_bplustree_worker(idx, queue, index, k, {start, end}, "");
+    }
+
+    // Single-threaded insertion into BPlusTree
+    std::pair<Run, size_t> result;
+    while (queue.try_pop(result)) {
+        bptree.insert(result.first, result.second);
+    }
+}
+
+
 Run generate_random_run() {
     static std::mt19937_64 rng(std::random_device{}());
     static std::uniform_int_distribution<size_t> pos_dist(1, 10000); // Adjust range as needed
@@ -282,7 +373,6 @@ Run generate_random_run() {
 // Function to perform a randomized test on BPlusTree
 void randomized_test_bplustree(int num_tests) {
     BplusTree<Run> bptree(15); // Adjust the degree of BPlusTree as needed
-    BplusTree<Run> bptree2(num_tests + 10); // Adjust the degree of BPlusTree as needed
 
     // Insert random Run objects into the BPlusTree
     for (int i = 0; i < num_tests; ++i) {
@@ -301,7 +391,7 @@ void randomized_test_bplustree(int num_tests) {
     auto prev_it = it;
     if (it != bptree.end()) ++it;
     while (it != bptree.end()) {
-        cout << "Checking " << *prev_it << " and " << *it << endl;
+//        cout << "Checking " << *prev_it << " and " << *it << endl;
         assert((*prev_it).start_position <= (*it).start_position);
         ++prev_it;
         ++it;
@@ -500,7 +590,8 @@ int main_panindexer(int argc, char **argv) {
 
 
     cout << "Adding the kmers to the BPlusTree" << endl;
-    kmers_to_bplustree(idx, bptree, index, k, {0, idx.bwt_size() - 1}, "");
+//    kmers_to_bplustree(idx, bptree, index, k, {0, idx.bwt_size() - 1}, "");
+    parallel_kmers_to_bplustree(idx, bptree, index, k, {0, idx.bwt_size() - 1});
 
 
 
