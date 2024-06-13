@@ -76,6 +76,16 @@ public:
     // change ith item to new item
     void change_item(T new_item, size_t i) {
         items[i] = new_item;
+
+//        if (parent != nullptr && i == 0) {
+//            auto index_parent = this->find_index_in_parent();
+//            cout << "index parent " << index_parent << " " << items[0] << endl;
+//            if (index_parent != 0) {
+//                parent->change_item(items[0], index_parent - 1);
+//            }
+//        }
+
+
     }
 
     // get parent node
@@ -151,6 +161,14 @@ public:
 
     void remove_first_item() {
         items.erase(items.begin());
+        // change the parent corresponding item
+//        if (parent != nullptr) {
+//            auto index_parent = this->find_index_in_parent();
+//            cout << "index parent " << index_parent << " " << items[0] << endl;
+//            if (index_parent != 0) {
+//                parent->change_item(items[0], index_parent - 1);
+//            }
+//        }
     }
 
     void remove_last_item() {
@@ -204,19 +222,83 @@ public:
         }
 
         new_items = run_insert(new_items, data, run_length, inserted_index);
-        if (inserted_index == -1) {
+        if (inserted_index == std::numeric_limits<size_t>::max()) {
+            return items;
+        }
+
+
+        if (DEBUG) cout << "OOOOOO" << inserted_index << " " << new_items.size() << endl;
+        // if the new item is added at the end of the node
+        if (inserted_index == new_items.size()) {
+            if (next != nullptr) {
+                bool res = merge_item_next(new_items);
+                if (!res) {
+                    return items;
+                }
+            }
+        }
+
+        if (new_items.size() < 3 || inserted_index < 1) {
+            if (prev != nullptr) {
+                bool res_prev = merge_item_prev(new_items);
+                if (!res_prev){
+                    return items;
+                }
+            }
+        }
+
+        return new_items;
+
+
+    }
+
+    // This is the same as the insert function, however this function change the success boolean to true if the insertion
+    // was successful and false otherwise.
+    vector<T> insert_success(const T &data, size_t run_length, bool &success) {
+        if (DEBUG) cout << "inserting into node " << data << " " << run_length << endl;
+        success = true;
+        assert(leaf);
+        size_t inserted_index;
+        std::vector<T> new_items;
+        new_items.reserve(degree + 2);
+        for (size_t i = 0; i < items.size(); i++) {
+            new_items.push_back(items[i]);
+        }
+
+
+        new_items = run_insert(new_items, data, run_length, inserted_index);
+        if (inserted_index == std::numeric_limits<size_t>::max()) {
+//            cout << "get here" << endl;
+            success = false;
             return new_items;
         }
 
         if (DEBUG) cout << "OOOOOO" << inserted_index << " " << new_items.size() << endl;
         // if the new item is added at the end of the node
-        if (new_items.size() < 3 || inserted_index > new_items.size() - 3) {
-            if (next != nullptr) merge_item_next(new_items);
+        if (new_items.size() < 3 || inserted_index == new_items.size()) {
+            if (next != nullptr) {
+                bool res = merge_item_next(new_items);
+                if (!res) {
+                    success = false;
+                    return items;
+                }
+            }
         }
 
-        if (new_items.size() < 3 || inserted_index < 1) {
-            if (prev != nullptr) merge_item_prev(new_items);
+        if (inserted_index == 0) {
+            if (prev != nullptr) {
+                bool res_prev = merge_item_prev(new_items);
+                if (!res_prev){
+                    success = false;
+                    return items;
+                }
+            }
         }
+
+//        for (auto &item: new_items) {
+//            cout << item << " ";
+//        }
+//        cout << "Done inserting " << endl;
 
         return new_items;
 
@@ -276,7 +358,73 @@ private:
 
         size_t len = new_items.size();
         int index = std::upper_bound(new_items.begin(), new_items.end(), new_run) - new_items.begin();
-        if (DEBUG) cout << "index: " << index << "len " << len << endl;
+        int gap_index =
+                std::lower_bound(new_items.begin(), new_items.end(), create_gap(new_run.start_position + run_length)) -
+                new_items.begin();
+//        cout << "index: " << index << "len " << len << endl;
+
+        if (gap_index - index > 0) {
+            if (DEBUG)
+                cout << "Error: the new run is not inserted correctly. The new run cannot inserted in another run!!"
+                     << endl;
+            inserted_index = std::numeric_limits<size_t>::max();
+            return new_items;
+        }
+
+
+
+//        // this case is when adding the new run has intersection with one of the adjacent runs
+//        // this is either error (if the graph position is not the same) or calling the run_insert for another run that
+//        // doesn't have intersection with the current runs
+//        if (index != gap_index){
+//            if (index == 0){
+//                // adding the new item at the first of the node, so have to check if the intersect run has the same graph position
+//                if (is_gap(new_items[index])){
+//                    // have to change the start position of the new_run to the gap run that happens after it and rerun the run_insert function
+//                    // It should never happen!
+//                    run_length -= (new_items[index].start_position - new_run.start_position);
+//                    new_run.start_position = new_items[index].start_position;
+//                    if (DEBUG) cout << "intersect case 0.0" << endl;
+//                    new_items = run_insert(new_items, new_run, run_length, inserted_index);
+//                    inserted_index = 0;
+//                    return new_items;
+//                } else {
+//                    // in this case we call the run_insert but for a new run that starts from the start of the next run
+//                    if (DEBUG) cout << "intersect case 0.1" << endl;
+//                    T temp = new_items[index];
+//                    new_items = run_insert(new_items, new_run, new_items[index].start_position - new_run.start_position, inserted_index);
+//                    if (new_run.start_position + run_length > temp.start_position) {
+//                        run_length -= (temp.start_position - new_run.start_position);
+//                        new_run.start_position = temp.start_position;
+//                        new_items = run_insert(new_items, new_run, run_length, inserted_index);
+//                    }
+//                    inserted_index = 0;
+//                    return new_items;
+//
+//
+//                }
+//
+//            } else {
+//                if (DEBUG) cout << "intersect case 1" << endl;
+//                T temp = new_items[index];
+//                new_items = run_insert(new_items, new_run, new_items[index].start_position - new_run.start_position, inserted_index);
+//                run_length -= (temp.start_position - new_run.start_position);
+//                new_run.start_position = temp.start_position;
+//                if (DEBUG) cout << "adding " << new_run << " with len " << run_length << endl;
+//                new_items = run_insert(new_items, new_run, run_length, inserted_index);
+//                // print all items in new_items
+//                if (DEBUG) {
+//                    for (auto &item: new_items) {
+//                        cout << item << " ";
+//                    }
+//                    cout << "Done intersecting " << endl;
+//
+//                }
+//
+//                return new_items;
+//            }
+//
+//        }
 
 
         if (new_items.size() == 0) {
@@ -287,25 +435,55 @@ private:
             return new_items;
         }
 
+//        cout << "BEFORE index: " << index << "len " << len << new_items[index] << endl;
+//        if (index > 1) cout << "item index - 1 " << new_items[index - 1] << endl;
+//        if (index == len){
+//            cout << "index is len " << new_items[index - 1] << endl;
+//            if (next != nullptr) cout << "next item " << next->get_item(0) << endl;
+//        }
+
+
         if (index == 0) {
-            if (is_gap(new_items[index])) {
+//            if (is_gap(new_items[index])) {
+//                // this is an error case and should not happen
+//                if (DEBUG)
+//                    cout << "Error: the new run is not inserted correctly. The new run cannot inserted in another run!"
+//                         << endl;
+//                inserted_index = std::numeric_limits<size_t>::max();
+//                return new_items;
+//
+//            }
+            if (prev != nullptr && !is_gap(prev->get_item(prev->get_size() - 1))) {
                 // this is an error case and should not happen
                 if (DEBUG)
                     cout << "Error: the new run is not inserted correctly. The new run cannot inserted in another run!"
                          << endl;
-                inserted_index = 0;
+                inserted_index = std::numeric_limits<size_t>::max();
                 return new_items;
 
             }
         } else {
             if (!is_gap(new_items[index - 1])) {
                 if (DEBUG)
-                    cout << "Error: the new run is not inserted correctly. The new run cannot inserted in another run!"
+                    cout << "Error: the new run is not inserted correctly. The new run cannot inserted in another run!!"
                          << endl;
-                inserted_index = 0;
+                inserted_index = std::numeric_limits<size_t>::max();
                 return new_items;
             }
+            if (index == len){
+                if (next != nullptr && new_run.start_position + run_length > next->get_item(0).start_position){
+                    if (DEBUG) cout << "Error: the new run is not inserted correctly. The new run cannot inserted in another run!!"
+                                    << endl;
+                    inserted_index = std::numeric_limits<size_t>::max();
+                    return new_items;
+                }
+            }
         }
+
+//        cout << "index: " << index << "len " << len << new_items[index] << endl;
+//        if (index == 1) {
+//            cout << "index is 1 " << new_items[index - 1] << " " << new_items[index] << endl;
+//        }
         // first case is when the new_run doesn't hit previous run or the next run
         if ((index == 0 || new_run.start_position > new_items[index - 1].start_position) &&
             (index == len || new_run.start_position + run_length < new_items[index].start_position)) {
@@ -318,7 +496,7 @@ private:
             } else if (index == len) {
                 new_items.push_back(new_run);
                 new_items.push_back(create_gap(new_run.start_position + run_length));
-                inserted_index = len + 1;
+                inserted_index = new_items.size();
                 return new_items;
             } else {
                 new_items.insert(new_items.begin() + index, new_run);
@@ -341,6 +519,15 @@ private:
                 inserted_index = index - 1;
                 return new_items;
             }
+//            else if (index == len){
+//                if (DEBUG) std::cout << "insert run case 2.0" << std::endl;
+//                // in this case have to remove the gap run and insert the new run in its place and then add a gap for the new run
+//                new_items[index - 1] = new_run;
+//
+//                new_items.insert(new_items.begin() + index, create_gap(new_run.start_position + run_length));
+//                inserted_index = new_items.size();
+//                return new_items;
+//            }
 
                 // two cases here, first being the new run graph position not be the same as the previous run graph position
             else if (new_run.graph_position.value != new_items[index - 2].graph_position.value) {
@@ -349,6 +536,7 @@ private:
                 new_items[index - 1] = new_run;
                 inserted_index = index - 1;
                 new_items.insert(new_items.begin() + index, create_gap(new_run.start_position + run_length));
+                if (index == len) inserted_index = new_items.size();
                 return new_items;
             }
                 // the other case is when the new run graph position is the same as the previous non-gap run graph position
@@ -357,6 +545,7 @@ private:
                 // in this case we just have to change the starting position of the gap in the index-1
                 new_items[index - 1].start_position += run_length;
                 inserted_index = index - 1;
+                if (index == len) inserted_index = new_items.size();
                 return new_items;
             }
 
@@ -464,7 +653,7 @@ private:
                 }
             }
         } else {
-            if (DEBUG){
+            if (DEBUG) {
                 std::cerr << "Error: the new run is not inserted correctly" << std::endl;
                 // printing some debug information
                 std::cerr << "new run: " << new_run << std::endl;
@@ -476,44 +665,57 @@ private:
                 std::cerr << std::endl;
 
             }
-            inserted_index = -1;
+            inserted_index = std::numeric_limits<size_t>::max();
+            return new_items;
         }
 //        return arr;
         return new_items;
     }
 
 
-    void merge_item_next(vector<T> &new_items) {
+    bool merge_item_next(vector<T> &new_items) {
         if (DEBUG) cout << "merging with the next node" << endl;
         assert(next != nullptr);
         vector<T> next_node_items = next->get_items();
+
+        if (!is_gap(new_items[new_items.size() - 1])) {
+            return false;
+        }
         if (next_node_items[0].start_position < new_items[new_items.size() - 1].start_position) {
             if (DEBUG) cout << "Error: the next node is not in the correct order!" << endl;
-            new_items.pop_back();
+//            new_items.pop_back();
 
-
-            // TODO: maybe change the starting position to the maximum it can be
-            return;
+            return false;
         } else if (next_node_items[0].start_position == new_items[new_items.size() - 1].start_position) {
             if (next_node_items[0].graph_position.value == new_items[new_items.size() - 2].graph_position.value) {
                 new_items.pop_back();
                 next->remove_first_item();
-                return;
+//                cout << "++++++++ " << new_items[new_items.size() - 1] << "----" << next_node_items[0] << endl;
+                return true;
             } else {
                 new_items.pop_back();
+                return true;
             }
         }
+        return true;
     }
 
 
-    void merge_item_prev(vector<T> &new_items) {
+    bool merge_item_prev(vector<T> &new_items) {
         assert(prev != nullptr);
         if (DEBUG) cout << "merging with the prev node" << endl;
         vector<T> prev_node_items = prev->get_items();
+//        if (!is_gap(prev_node_items[prev_node_items.size() - 1])){
+//
+//            return false;
+//        }
         if (prev_node_items[prev_node_items.size() - 1].graph_position == new_items[0].graph_position) {
 //            cout << "++++++++ " << new_items[0];
             new_items.erase(new_items.begin());
+            return true;
         }
+        return true;
+
     }
 
 
@@ -963,8 +1165,13 @@ public:
 
     }
 
-
     void insert(const T &data, size_t run_length) {
+        insert_success(data, run_length);
+    }
+
+
+    bool insert_success(const T &data, size_t run_length) {
+        bool success = true;
         if (root == nullptr) {
             root = new bpNode<T>(degree, true);
             vector<T> temp = root->insert(data, run_length);
@@ -972,9 +1179,12 @@ public:
 
         } else {
             bpNode<T> *leaf = leaf_search(root, data);
-            vector<T> inserted_items = leaf->insert(data, run_length);
+            vector<T> inserted_items = leaf->insert_success(data, run_length, success);
+            if (!success) {
+                return success;
+            }
             // print the items in inserted_items
-            if (DEBUG) for (auto &item: inserted_items) {cout << "item: " << item << endl;}
+            if (DEBUG) for (auto &item: inserted_items) { cout << "item: " << item << endl; }
 
             if (inserted_items.size() <= degree) {
                 leaf->replace_items_leaf(inserted_items);
@@ -999,7 +1209,7 @@ public:
                 }
 
                 // print all items in inserted_items
-                if (DEBUG) for (auto &item: inserted_items) {cout << "ITEM: " << item << endl;}
+                if (DEBUG) for (auto &item: inserted_items) { cout << "ITEM: " << item << endl; }
 
                 // change the items of the nodes
                 leaf->replace_items_leaf(inserted_items);
@@ -1060,6 +1270,8 @@ public:
 
 
         }
+        return success;
+
     }
 
 
@@ -1121,6 +1333,17 @@ public:
                 if (index >= node->get_size()) {
                     node = node->get_next();
                     index = 0;
+                }
+            }
+            return *this;
+        }
+
+        Iterator &operator--() {
+            if (node != nullptr) {
+                index--;
+                if (index < 0) {
+                    node = node->get_prev();
+                    index = node->get_size() - 1;
                 }
             }
             return *this;
