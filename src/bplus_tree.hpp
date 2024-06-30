@@ -88,6 +88,20 @@ public:
 
     }
 
+
+    // find the index of the item in the node
+    size_t search(T &data){
+        for (size_t i = 0; i < items.size(); i++) {
+            if (data < items[i]) {
+                return i;
+            }
+            if (i == items.size() - 1) {
+                return i + 1;
+            }
+        }
+        return -1;
+    }
+
     // get parent node
     bpNode<T> *get_parent() {
         return parent;
@@ -348,6 +362,8 @@ private:
     bool is_gap(T run) {
         return run.graph_position.value == 0;
     }
+
+
 
 
     /*
@@ -1164,6 +1180,32 @@ public:
         return current;
 
     }
+
+    size_t *search_index(T data) {
+        bpNode<T> *current = leaf_search(root, data);
+
+        // find the index of the maximum data before the data
+        return current->search(data);
+
+    }
+
+    T search(size_t position) {
+        T data = {position, 0};
+        bpNode<T> *current = leaf_search(root, data);
+        size_t index = current->search(data);
+        cout << "index " << index << endl;
+        if (index == 0){
+            if (current->get_prev() != nullptr){
+                return current->get_prev()->get_item(current->get_prev()->get_size() - 1);
+            } else {
+                return {0, 0};
+            }
+
+        }
+        return current->get_item(index - 1);
+
+    }
+
 
     void insert(const T &data, size_t run_length) {
         insert_success(data, run_length);

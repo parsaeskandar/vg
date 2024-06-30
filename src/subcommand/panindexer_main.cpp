@@ -27,7 +27,8 @@
 
 #include <string>
 
-bool debug = false;
+
+bool debug = true;
 
 using namespace std;
 using namespace ri;
@@ -139,6 +140,7 @@ unique_kmers_parallel(const GBWTGraph &graph, vg::hash_map<gbwtgraph::Key64::val
         for (auto kmer: kmers) {
             if (kmer.empty()) continue;
 
+
             size_t node_length = graph.get_length(*iter);
             while (node_start + node_length <= kmer.offset) {
                 node_start += node_length;
@@ -148,6 +150,13 @@ unique_kmers_parallel(const GBWTGraph &graph, vg::hash_map<gbwtgraph::Key64::val
 
             vg::pos_t pos{graph.get_id(*iter), graph.get_is_reverse(*iter), kmer.offset - node_start};
 //            cout << " The pos is: " << gbwtgraph::id(pos) << " " << gbwtgraph::offset(pos) << " " << gbwtgraph::is_rev(pos) << endl;
+
+            if (debug){
+                if (gbwtgraph::Key64::encode("GACAAATCTGGGTTCAAATCCTCACTTTG") == kmer.key){
+                    cout << "The key is: " << kmer.key << " " << kmer.offset << " id " << graph.get_id(*iter) << " rev " << graph.get_is_reverse(*iter) << " kmer offset " << kmer.offset << " node_start " << node_start << " node_length " << node_length  << endl;
+                }
+
+            }
 
             if (!gbwtgraph::Position::valid_offset(pos)) {
 #pragma omp critical (cerr)
@@ -178,20 +187,16 @@ unique_kmers_parallel(const GBWTGraph &graph, vg::hash_map<gbwtgraph::Key64::val
 
 // This function input is the OCC vector of the end of the sequences (#) and it returns the sorted end_of_seq vector
 // which is the sorted vector of pairs (i, SA[i]) for the end of each sequence which is (ISA[j], j)
-vector<pair<uint64_t, uint64_t>> sort_end_of_seq(vector<uint64_t> &OCC) {
-    vector<pair<uint64_t, uint64_t>> end_of_seq;
-    auto number_of_sequences = OCC.size();
-    for (int64_t i = 0; i <= number_of_sequences - 1; ++i) {
-        end_of_seq.emplace_back(number_of_sequences - i - 1, OCC[i]);
-    }
+vector<pair<uint64_t, uint64_t>> sort_end_of_seq(vector< pair<uint64_t, uint64_t> > &OCC) {
+
 
     // Sort the end_of_seq vector by the second element of each pair
-    sort(end_of_seq.begin(), end_of_seq.end(),
+    sort(OCC.begin(), OCC.end(),
          [](const pair<uint64_t, uint64_t> &a, const pair<uint64_t, uint64_t> &b) {
              return a.second < b.second;
          });
 
-    return end_of_seq;
+    return OCC;
 }
 
 // Create a Run struct to store the run data structure for the BPlusTree
@@ -363,8 +368,8 @@ void parallel_kmers_to_bplustree(r_index<> &idx, BplusTree<Run> &bptree,
 
 Run generate_random_run() {
     static std::mt19937_64 rng(std::random_device{}());
-    static std::uniform_int_distribution<size_t> pos_dist(1, 10000); // Adjust range as needed
-    static std::uniform_int_distribution<uint64_t> graph_pos_dist(1, 5); // Adjust range as needed
+    static std::uniform_int_distribution<size_t> pos_dist(1, 100000); // Adjust range as needed
+    static std::uniform_int_distribution<uint64_t> graph_pos_dist(1, 15); // Adjust range as needed
 
     Run run;
     run.start_position = pos_dist(rng);
@@ -376,7 +381,7 @@ Run generate_random_run() {
 // Function to perform a randomized test on BPlusTree
 void randomized_test_bplustree(int num_tests) {
     BplusTree<Run> bptree(15); // Adjust the degree of BPlusTree as needed
-    BplusTree<Run> bptree2(17);
+    BplusTree<Run> bptree2(16);
     BplusTree<Run> bptree3(num_tests + 15);
 
 
@@ -401,6 +406,7 @@ void randomized_test_bplustree(int num_tests) {
     while (it != bptree.end()) {
 //        cout << "Checking " << *prev_it << " and " << *it << endl;
         assert((*prev_it).start_position <= (*it).start_position);
+        assert((*prev_it).graph_position.value != (*it).graph_position.value);
         ++prev_it;
         ++it;
     }
@@ -511,14 +517,6 @@ vector< pair<Run, size_t> > extend_kmers_on_graph(GBWTGraph &graph, r_index<> &i
 
     return extension_candidates;
 }
-
-
-#include <vector>
-#include <queue>
-#include <mutex>
-#include <iostream>
-
-// Assuming necessary VG and GBWTGraph libraries are included
 
 vector< pair<Run, size_t> > extend_kmers_bfs(GBWTGraph &graph, r_index<> &idx, BplusTree<Run> &bptree) {
     bool succ = true;
@@ -925,6 +923,10 @@ vector< pair<Run, size_t> > extend_kmers_bfs_parallel(GBWTGraph &graph, r_index<
 
 
 
+
+
+
+
 int main_panindexer(int argc, char **argv) {
 
     if (argc <= 3) {
@@ -1018,14 +1020,44 @@ int main_panindexer(int argc, char **argv) {
 
     // read the gbz file and store it in the gbz data structure
 
-//    int num_tests = 100000; // Number of random tests
+//    int num_tests = 1000000; // Number of random tests
 //    randomized_test_bplustree(num_tests);
 //    return 0;
+
+
 
     unique_ptr<gbwtgraph::GBZ> gbz;
     cout << "Loading the graph file" << endl;
     auto input = vg::io::VPKG::try_load_first<gbwtgraph::GBZ, gbwtgraph::GBWTGraph, HandleGraph>(graph_file);
     gbz = std::move(get<0>(input));
+
+//    auto temp = gbz->index.extract(0);
+//    for (auto& i : temp) {
+//        auto x = GBWTGraph::node_to_handle(i);
+//        cout << gbz->graph.get_sequence(x) << endl;
+//
+//    }
+//
+//    cout << "second           ASFSŠ" << endl;
+//
+//    auto temp1 = gbz->index.extract(2);
+//    for (auto& i : temp1) {
+//        auto x = GBWTGraph::node_to_handle(i);
+//        cout << gbz->graph.get_sequence(x) << endl;
+//
+//    }
+
+
+//    cout << "Reading the rindex file" << endl;
+//    std::ifstream in(index_file);
+//    bool fast;
+//    //fast or small index?
+//    in.read((char *) &fast, sizeof(fast));
+//    r_index<> idx;
+//    idx.load(in);
+
+
+
 
 
     bool progress = true;
@@ -1093,8 +1125,8 @@ int main_panindexer(int argc, char **argv) {
     // calling the extension function
     for (int i = 0; i < 1; i++){
         cout << "Extending the kmers on the graph" << endl;
-//        auto extension_candidates = extend_kmers_bfs_parallel(gbz->graph, idx, bptree, 1024);
-        auto extension_candidates = extend_kmers_bfs(gbz->graph, idx, bptree);
+        auto extension_candidates = extend_kmers_bfs_parallel(gbz->graph, idx, bptree, 1024);
+//        auto extension_candidates = extend_kmers_bfs(gbz->graph, idx, bptree);
         cout << "The extension candidates are: " << endl;
         cout << extension_candidates.size() << endl;
 
@@ -1120,6 +1152,7 @@ int main_panindexer(int argc, char **argv) {
             if (next_it != bptree.end()) { // Check if the next element is not the end
                 Run next_item = *next_it; // Get the next item
                 tag_arrays_covered += (next_item.start_position - current_item.start_position);
+                cout << "The current item is: " << current_item << " NEXT " << next_item << endl;
 //                if (next_item.start_position - current_item.start_position > 500){
 //                    cout << "The current item is: " << current_item << " The next item is: " << next_item << endl;
 //                }
@@ -1129,6 +1162,143 @@ int main_panindexer(int argc, char **argv) {
 
     cout << "The fraction of the tag arrays covered is: " << tag_arrays_covered << " / " << bwt_size << " = "
          << (double) tag_arrays_covered / bwt_size << endl;
+
+
+
+    string pattern = "$";
+
+
+    // get the ISA values for the end of each sequence by searching for pattern # and locating the results
+    auto OCC = idx.ISA(pattern);
+
+    // print all the ISA values
+    for (auto& i : OCC) {
+        cout << i.first << " " << i.second << endl;
+    }
+
+
+
+    // print the bwt of the index
+    cout << idx.get_bwt() << endl;
+
+    // using the sort_end_of_seq function
+    // the first item in the nth element of this is the end of the nth sequence in the bwt
+    auto end_of_seq = sort_end_of_seq(OCC);
+
+    for (auto& i : end_of_seq) {
+        cout << i.first << " " << i.second << endl;
+    }
+
+    // traversing the sequenece in the RLBWT and the graph
+    int seq_num = 0;
+    auto seq_graph_nodes = gbz->index.extract(seq_num);
+    auto bwt_index = end_of_seq[seq_num].first;
+
+
+
+//    // traversing the oriented path of a sequence backward on the graph
+//    for (int i = seq_graph_nodes.size() - 1; i >= 0; --i){
+//
+//        //traverse the graph backwards
+//        auto node = GBWTGraph::node_to_handle(seq_graph_nodes[i]);
+//
+//        // search the
+//
+////        cout << gbz->graph.get_length(node) << endl;
+//
+//
+//        for (int j = gbz->graph.get_length(node) - 1; j >= 0; --j){
+//            bwt_index = idx.LF(bwt_index);
+//            cout << idx.F_at(bwt_index) << " " << gbz->graph.get_base(node, j) << endl;
+//            cout << bwt_index << endl;
+//
+//        }
+//
+//
+////        cout << gbz->graph.get_sequence(node) << endl;
+////        cout << gbz->graph.get_length(node) << endl;
+//
+//    }
+
+    auto current_nodes_index = seq_graph_nodes.size() - 1;
+    auto current_node = GBWTGraph::node_to_handle(seq_graph_nodes[current_nodes_index]);
+    auto in_node_index = gbz->graph.get_length(current_node) - 1;
+
+    // traversing the RLBWT of a sequence
+    while (true){
+        // moving backwards
+        bwt_index = idx.LF(bwt_index);
+        auto first = idx.F_at(bwt_index);
+        if (first == '$'){
+            break;
+        }
+
+        // make sure there is still room to travese on the current node
+        if (in_node_index == -1){
+            if (current_nodes_index == 0){
+                break;
+            }
+            current_nodes_index--;
+            current_node = GBWTGraph::node_to_handle(seq_graph_nodes[current_nodes_index]);
+            in_node_index = gbz->graph.get_length(current_node) - 1;
+        }
+
+
+        assert(first == gbz->graph.get_base(current_node, in_node_index));
+        //traverse the nodes on the graph to get the same base
+
+
+//        cout << "F " << first << " graph base " << gbz->graph.get_base(current_node, in_node_index) << endl;
+        cout << bwt_index << endl;
+        in_node_index--;
+
+
+        // have to check if the current bwt position is in the bptree or not
+        // calling search function if it return a gap run then this position is not currently in the tree and have to add it
+        // if it returns a non-gap run then this position is already in the tree and we can continue traversing the bwt
+
+
+        auto bptree_search = bptree.search(bwt_index);
+        cout << "tree search " << bptree_search << endl;
+
+        // the current position is not in the tree
+        if (bptree_search.graph_position.value == 0){
+
+            // adding the current position to the tree
+
+
+//            pos_t current_pos = vg::pos_t{gbz->graph.get_id(current_node), gbz->graph.get_is_reverse(current_node),
+//                                          in_node_index};
+//
+//            Run current_run = {bwt_index, gbwtgraph::Position::encode(current_pos)};
+//            bptree.insert(current_run, 1);
+
+
+
+
+        } else {
+            // not adding the current position to the tree however checking if the tree position and the current graph
+            // positions are the same
+            pos_t current_pos = vg::pos_t{gbz->graph.get_id(current_node), gbz->graph.get_is_reverse(current_node),
+                                          in_node_index + 1};
+            if (gbwtgraph::Position::encode(current_pos).value != bptree_search.graph_position.value) {
+                cout << "reverse? " << gbz->graph.get_is_reverse(current_node) << endl;
+                cout << "node len " << gbz->graph.get_length(current_node) << endl;
+                cout << "The graph position in the tree " << vg::id(bptree_search.graph_position.decode()) << " "
+                     << vg::offset(bptree_search.graph_position.decode()) << " the actual brute force graph position "
+                     << vg::id(current_pos) << " " << vg::offset(current_pos) << endl;
+            }
+        }
+
+
+
+
+
+
+
+
+    }
+
 
 
 
