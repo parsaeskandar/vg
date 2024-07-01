@@ -1193,7 +1193,7 @@ public:
         T data = {position, 0};
         bpNode<T> *current = leaf_search(root, data);
         size_t index = current->search(data);
-        cout << "index " << index << endl;
+//        cout << "index " << index << endl;
         if (index == 0){
             if (current->get_prev() != nullptr){
                 return current->get_prev()->get_item(current->get_prev()->get_size() - 1);

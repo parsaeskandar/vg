@@ -28,7 +28,7 @@
 #include <string>
 
 
-bool debug = true;
+bool debug = false;
 
 using namespace std;
 using namespace ri;
@@ -179,7 +179,8 @@ unique_kmers_parallel(const GBWTGraph &graph, vg::hash_map<gbwtgraph::Key64::val
     };
 
     // Parallel execution
-    gbwtgraph::for_each_nonredundant_window(graph, k, hash_kmers, true);
+//    gbwtgraph::for_each_nonredundant_window(graph, k, hash_kmers, true);
+    gbwtgraph::for_each_haplotype_window(graph, k, hash_kmers, true);
     for (int thread_id = 0; thread_id < threads; thread_id++) { flush_cache(thread_id); }
 
 }
@@ -638,153 +639,6 @@ vector< pair<Run, size_t> > extend_kmers_bfs(GBWTGraph &graph, r_index<> &idx, B
 
 
 
-
-
-
-
-
-
-
-
-//vector< pair<Run, size_t> > extend_kmers_bfs_parallel(GBWTGraph &graph, r_index<> &idx, BplusTree<Run> &bptree, int batch_size) {
-//    vector< pair<Run, size_t> > extension_candidates;
-//
-//    // Queue for BFS
-//    std::queue< pair<Run, size_t> > bfs_queue;
-//    std::mutex queue_mutex, bptree_mutex;
-//
-//    // Initialize batch for each thread
-//    int num_threads = omp_get_max_threads();
-//    vector<vector<pair<Run, size_t>>> batch(num_threads);
-//
-//    // Add initial runs to the queue
-//    for (auto it = bptree.begin(); it != bptree.end(); ++it) {
-//        Run current_item = *it;
-//        if (current_item.graph_position.value != 0) {
-//            auto next_it = it;
-//            ++next_it;
-//            if (next_it != bptree.end()) {
-//                Run next_item = *next_it;
-//                bfs_queue.push(make_pair(current_item, next_item.start_position));
-//            }
-//        }
-//    }
-//
-//    // Parallel BFS to extend kmers
-//#pragma omp parallel
-//    {
-//        int thread_num = omp_get_thread_num();
-//        while (true) {
-//            pair<Run, size_t> current_pair;
-//            {
-//                std::lock_guard<std::mutex> lock(queue_mutex);
-//                if (bfs_queue.empty()) break;
-//                current_pair = bfs_queue.front();
-//                bfs_queue.pop();
-//            }
-//
-//            Run current_item = current_pair.first;
-//            size_t interval_end = current_pair.second;
-//
-//            if (current_item.graph_position.value != 0) {
-//                auto current_starting_pos = current_item.start_position;
-//                auto current_graph_pos = current_item.graph_position;
-//
-//                // Decode the Position to a pos_t
-//                pos_t current_pos = current_graph_pos.decode();
-//
-//                // Get the traversal of the graph position
-//                handle_t current_handle = graph.get_handle(vg::id(current_pos), false);
-//
-//                // The BWT interval of the current kmer
-//                range_t current_interval = {current_starting_pos, interval_end - 1};
-//
-//                if (!vg::is_rev(current_pos)) {
-//                    if (vg::offset(current_pos) > 0) {
-//                        auto prev_base = graph.get_base(graph.get_handle(vg::id(current_pos), vg::is_rev(current_pos)),
-//                                                        vg::offset(current_pos) - 1);
-//                        auto prev_graph_pos = vg::pos_t{vg::id(current_pos), vg::is_rev(current_pos),
-//                                                        vg::offset(current_pos) - 1};
-//
-//                        auto new_range = idx.LF(current_interval, prev_base);
-//
-//                        if (new_range.first <= new_range.second) {
-//                            Run temp_run = {new_range.first, gbwtgraph::Position::encode(prev_graph_pos)};
-//                            batch[thread_num].push_back({temp_run, new_range.second - new_range.first + 1});
-//
-//                            if (batch[thread_num].size() >= batch_size) {
-//                                std::lock_guard<std::mutex> lock(bptree_mutex);
-//                                for (const auto& item : batch[thread_num]) {
-//                                    bptree.insert(item.first, item.second);
-//                                    std::lock_guard<std::mutex> lock(queue_mutex);
-//                                    bfs_queue.push(make_pair(item.first, item.second + 1));
-////                                    if (bptree.insert_success(item.first, item.second)) {
-////                                        std::lock_guard<std::mutex> lock(queue_mutex);
-////                                        bfs_queue.push(make_pair(item.first, item.second + 1));
-////                                    }
-//                                }
-//                                batch[thread_num].clear();
-//                            }
-//                        }
-//                    } else {
-//                        int prev_bases_num = 0;
-//                        handle_t prev_node;
-//                        char prev_base;
-//                        pos_t prev_graph_pos;
-//
-//                        graph.follow_edges(current_handle, true, [&](const handle_t& prev) {
-//                            prev_bases_num++;
-//                            if (prev_bases_num != 1) return false;
-//                            prev_base = graph.get_base(prev, graph.get_length(prev) - 1);
-//                            prev_node = prev;
-//                            return true;
-//                        });
-//
-//                        if (prev_bases_num == 1) {
-//                            prev_graph_pos = vg::pos_t{graph.get_id(prev_node), graph.get_is_reverse(prev_node),
-//                                                       graph.get_length(prev_node) - 1};
-//                            auto new_range = idx.LF(current_interval, prev_base);
-//                            if (new_range.first <= new_range.second) {
-//                                Run new_run = {new_range.first, gbwtgraph::Position::encode(prev_graph_pos)};
-//                                batch[thread_num].push_back({new_run, new_range.second - new_range.first + 1});
-//
-//                                if (batch[thread_num].size() >= batch_size) {
-//                                    std::lock_guard<std::mutex> lock(bptree_mutex);
-//                                    for (const auto& item : batch[thread_num]) {
-//                                        bptree.insert(item.first, item.second);
-//                                        std::lock_guard<std::mutex> lock(queue_mutex);
-//                                        bfs_queue.push(make_pair(item.first, item.second + 1));
-////                                        if (bptree.insert_success(item.first, item.second)) {
-////                                            std::lock_guard<std::mutex> lock(queue_mutex);
-////                                            bfs_queue.push(make_pair(item.first, item.second + 1));
-////                                        }
-//                                    }
-//                                    batch[thread_num].clear();
-//                                }
-//                            }
-//                        }
-//                    }
-//                }
-//            }
-//        }
-//
-//        // Process remaining items in the local batch
-//        if (!batch[thread_num].empty()) {
-//            std::lock_guard<std::mutex> lock(bptree_mutex);
-//            for (const auto& item : batch[thread_num]) {
-//                if (bptree.insert_success(item.first, item.second)) {
-//                    std::lock_guard<std::mutex> lock(queue_mutex);
-//                    bfs_queue.push(make_pair(item.first, item.second + 1));
-//                }
-//            }
-//            batch[thread_num].clear();
-//        }
-//    }
-//
-//    return extension_candidates;
-//}
-
-
 vector< pair<Run, size_t> > extend_kmers_bfs_parallel(GBWTGraph &graph, r_index<> &idx, BplusTree<Run> &bptree, int batch_size) {
     vector< pair<Run, size_t> > extension_candidates;
 
@@ -1152,7 +1006,7 @@ int main_panindexer(int argc, char **argv) {
             if (next_it != bptree.end()) { // Check if the next element is not the end
                 Run next_item = *next_it; // Get the next item
                 tag_arrays_covered += (next_item.start_position - current_item.start_position);
-                cout << "The current item is: " << current_item << " NEXT " << next_item << endl;
+//                cout << "The current item is: " << current_item << " NEXT " << next_item << endl;
 //                if (next_item.start_position - current_item.start_position > 500){
 //                    cout << "The current item is: " << current_item << " The next item is: " << next_item << endl;
 //                }
@@ -1179,7 +1033,7 @@ int main_panindexer(int argc, char **argv) {
 
 
     // print the bwt of the index
-    cout << idx.get_bwt() << endl;
+//    cout << idx.get_bwt() << endl;
 
     // using the sort_end_of_seq function
     // the first item in the nth element of this is the end of the nth sequence in the bwt
@@ -1249,7 +1103,7 @@ int main_panindexer(int argc, char **argv) {
 
 
 //        cout << "F " << first << " graph base " << gbz->graph.get_base(current_node, in_node_index) << endl;
-        cout << bwt_index << endl;
+//        cout << bwt_index << endl;
         in_node_index--;
 
 
@@ -1259,7 +1113,7 @@ int main_panindexer(int argc, char **argv) {
 
 
         auto bptree_search = bptree.search(bwt_index);
-        cout << "tree search " << bptree_search << endl;
+//        cout << "tree search " << bptree_search << endl;
 
         // the current position is not in the tree
         if (bptree_search.graph_position.value == 0){
@@ -1267,11 +1121,11 @@ int main_panindexer(int argc, char **argv) {
             // adding the current position to the tree
 
 
-//            pos_t current_pos = vg::pos_t{gbz->graph.get_id(current_node), gbz->graph.get_is_reverse(current_node),
-//                                          in_node_index};
-//
-//            Run current_run = {bwt_index, gbwtgraph::Position::encode(current_pos)};
-//            bptree.insert(current_run, 1);
+            pos_t current_pos = vg::pos_t{gbz->graph.get_id(current_node), gbz->graph.get_is_reverse(current_node),
+                                          in_node_index};
+
+            Run current_run = {bwt_index, gbwtgraph::Position::encode(current_pos)};
+            bptree.insert(current_run, 1);
 
 
 
@@ -1281,6 +1135,8 @@ int main_panindexer(int argc, char **argv) {
             // positions are the same
             pos_t current_pos = vg::pos_t{gbz->graph.get_id(current_node), gbz->graph.get_is_reverse(current_node),
                                           in_node_index + 1};
+
+
             if (gbwtgraph::Position::encode(current_pos).value != bptree_search.graph_position.value) {
                 cout << "reverse? " << gbz->graph.get_is_reverse(current_node) << endl;
                 cout << "node len " << gbz->graph.get_length(current_node) << endl;
@@ -1288,6 +1144,8 @@ int main_panindexer(int argc, char **argv) {
                      << vg::offset(bptree_search.graph_position.decode()) << " the actual brute force graph position "
                      << vg::id(current_pos) << " " << vg::offset(current_pos) << endl;
             }
+
+            assert(gbwtgraph::Position::encode(current_pos).value == bptree_search.graph_position.value);
         }
 
 
@@ -1298,6 +1156,32 @@ int main_panindexer(int argc, char **argv) {
 
 
     }
+
+
+    cout << "The number of items in the BPlusTree is: " << bptree.get_bpt_size() << endl;
+    tag_arrays_covered = 0;
+
+    cout << "calculating the fraction of the tag arrays covered after one extension" << endl;
+    // calculating the fraction of the tag arrays covered
+    for (auto it = bptree.begin(); it != bptree.end(); ++it) {
+        Run current_item = *it;
+        if (current_item.graph_position.value != 0) { // Check if the current item is not a gap
+            auto next_it = it;
+            ++next_it; // Move to the next element
+            if (next_it != bptree.end()) { // Check if the next element is not the end
+                Run next_item = *next_it; // Get the next item
+                tag_arrays_covered += (next_item.start_position - current_item.start_position);
+//                cout << "The current item is: " << current_item << " NEXT " << next_item << endl;
+//                if (next_item.start_position - current_item.start_position > 500){
+//                    cout << "The current item is: " << current_item << " The next item is: " << next_item << endl;
+//                }
+            }
+        }
+    }
+
+    cout << "The fraction of the tag arrays covered is: " << tag_arrays_covered << " / " << bwt_size << " = "
+         << (double) tag_arrays_covered / bwt_size << endl;
+
 
 
 
