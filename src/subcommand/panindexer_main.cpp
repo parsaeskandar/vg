@@ -100,14 +100,14 @@ unique_kmers_parallel(const GBWTGraph &graph, vg::hash_map<gbwtgraph::Key64::val
         auto current_cache = cache[thread_number];
 
         // Sort the cache by key
-        std::sort(current_cache.begin(), current_cache.end(), [](const auto &a, const auto &b) {
-            return a.first < b.first;
-        });
-        // Remove duplicates
-        auto last = std::unique(current_cache.begin(), current_cache.end(), [](const auto &a, const auto &b) {
-            return a.first == b.first;
-        });
-        current_cache.erase(last, current_cache.end());
+//        std::sort(current_cache.begin(), current_cache.end(), [](const auto &a, const auto &b) {
+//            return a.first < b.first;
+//        });
+//        // Remove duplicates
+//        auto last = std::unique(current_cache.begin(), current_cache.end(), [](const auto &a, const auto &b) {
+//            return a.first == b.first;
+//        });
+//        current_cache.erase(last, current_cache.end());
 #pragma omp critical
         {
             for (auto entry: current_cache) {
@@ -1044,118 +1044,151 @@ int main_panindexer(int argc, char **argv) {
     }
 
     // traversing the sequenece in the RLBWT and the graph
-    int seq_num = 0;
-    auto seq_graph_nodes = gbz->index.extract(seq_num);
-    auto bwt_index = end_of_seq[seq_num].first;
+//    int seq_num = 1;
+//    auto seq_graph_nodes = gbz->index.extract(seq_num * 2);
+//    auto bwt_index = end_of_seq[seq_num].first;
 
 
 
-//    // traversing the oriented path of a sequence backward on the graph
-//    for (int i = seq_graph_nodes.size() - 1; i >= 0; --i){
-//
-//        //traverse the graph backwards
-//        auto node = GBWTGraph::node_to_handle(seq_graph_nodes[i]);
-//
-//        // search the
-//
-////        cout << gbz->graph.get_length(node) << endl;
-//
-//
-//        for (int j = gbz->graph.get_length(node) - 1; j >= 0; --j){
-//            bwt_index = idx.LF(bwt_index);
-//            cout << idx.F_at(bwt_index) << " " << gbz->graph.get_base(node, j) << endl;
-//            cout << bwt_index << endl;
-//
-//        }
-//
-//
-////        cout << gbz->graph.get_sequence(node) << endl;
-////        cout << gbz->graph.get_length(node) << endl;
-//
-//    }
 
-    auto current_nodes_index = seq_graph_nodes.size() - 1;
-    auto current_node = GBWTGraph::node_to_handle(seq_graph_nodes[current_nodes_index]);
-    auto in_node_index = gbz->graph.get_length(current_node) - 1;
 
-    // traversing the RLBWT of a sequence
-    while (true){
-        // moving backwards
-        bwt_index = idx.LF(bwt_index);
-        auto first = idx.F_at(bwt_index);
-        if (first == '$'){
-            break;
-        }
+//    auto current_nodes_index = seq_graph_nodes.size() - 1;
+//    auto current_node = GBWTGraph::node_to_handle(seq_graph_nodes[current_nodes_index]);
+//    auto in_node_index = gbz->graph.get_length(current_node) - 1;
 
-        // make sure there is still room to travese on the current node
-        if (in_node_index == -1){
-            if (current_nodes_index == 0){
+    auto number_of_sequences = end_of_seq.size();
+    int traverse = 0;
+
+    vector < int > tmp;
+
+    vector < Run > tmp1;
+
+    for (int seq_num = 0; seq_num < number_of_sequences; ++seq_num){
+        cout << "running for sequence number " << seq_num << endl;
+        cout << traverse << endl;
+
+        auto seq_graph_nodes = gbz->index.extract(seq_num * 2);
+        auto bwt_index = end_of_seq[seq_num].first;
+
+
+        auto current_nodes_index = seq_graph_nodes.size() - 1;
+        auto current_node = GBWTGraph::node_to_handle(seq_graph_nodes[current_nodes_index]);
+        auto in_node_index = gbz->graph.get_length(current_node) - 1;
+
+        // traversing the RLBWT of a sequence
+        while (true){
+            traverse++;
+
+            // moving backwards
+            bwt_index = idx.LF(bwt_index);
+            auto first = idx.F_at(bwt_index);
+            if (first == '$'){
+                cout << "The end of the sequence at bwt index " << bwt_index << endl;
                 break;
             }
-            current_nodes_index--;
-            current_node = GBWTGraph::node_to_handle(seq_graph_nodes[current_nodes_index]);
-            in_node_index = gbz->graph.get_length(current_node) - 1;
-        }
 
 
-        assert(first == gbz->graph.get_base(current_node, in_node_index));
-        //traverse the nodes on the graph to get the same base
+            // make sure there is still room to travese on the current node
+            if (in_node_index == -1){
+                if (current_nodes_index == 0){
+                    break;
+                }
+                current_nodes_index--;
+                current_node = GBWTGraph::node_to_handle(seq_graph_nodes[current_nodes_index]);
+                in_node_index = gbz->graph.get_length(current_node) - 1;
+            }
+
+
+            assert(first == gbz->graph.get_base(current_node, in_node_index));
+            //traverse the nodes on the graph to get the same base
 
 
 //        cout << "F " << first << " graph base " << gbz->graph.get_base(current_node, in_node_index) << endl;
 //        cout << bwt_index << endl;
-        in_node_index--;
+            in_node_index--;
 
 
-        // have to check if the current bwt position is in the bptree or not
-        // calling search function if it return a gap run then this position is not currently in the tree and have to add it
-        // if it returns a non-gap run then this position is already in the tree and we can continue traversing the bwt
+            // have to check if the current bwt position is in the bptree or not
+            // calling search function if it return a gap run then this position is not currently in the tree and have to add it
+            // if it returns a non-gap run then this position is already in the tree and we can continue traversing the bwt
 
 
-        auto bptree_search = bptree.search(bwt_index);
+            auto bptree_search = bptree.search(bwt_index);
+
+//            cout << bwt_index << endl;
+
+
 //        cout << "tree search " << bptree_search << endl;
 
-        // the current position is not in the tree
-        if (bptree_search.graph_position.value == 0){
-
-            // adding the current position to the tree
+            // the current position is not in the tree
+            if (bptree_search.graph_position.value == 0){
 
 
-            pos_t current_pos = vg::pos_t{gbz->graph.get_id(current_node), gbz->graph.get_is_reverse(current_node),
-                                          in_node_index};
+                // adding the current position to the tree
+                pos_t current_pos = vg::pos_t{gbz->graph.get_id(current_node), gbz->graph.get_is_reverse(current_node),
+                                              in_node_index + 1};
 
-            Run current_run = {bwt_index, gbwtgraph::Position::encode(current_pos)};
-            bptree.insert(current_run, 1);
-
-
-
-
-        } else {
-            // not adding the current position to the tree however checking if the tree position and the current graph
-            // positions are the same
-            pos_t current_pos = vg::pos_t{gbz->graph.get_id(current_node), gbz->graph.get_is_reverse(current_node),
-                                          in_node_index + 1};
+                Run current_run = {bwt_index, gbwtgraph::Position::encode(current_pos)};
+//                bptree.insert(current_run, 1);
+                tmp1.push_back(current_run);
 
 
-            if (gbwtgraph::Position::encode(current_pos).value != bptree_search.graph_position.value) {
-                cout << "reverse? " << gbz->graph.get_is_reverse(current_node) << endl;
-                cout << "node len " << gbz->graph.get_length(current_node) << endl;
-                cout << "The graph position in the tree " << vg::id(bptree_search.graph_position.decode()) << " "
-                     << vg::offset(bptree_search.graph_position.decode()) << " the actual brute force graph position "
-                     << vg::id(current_pos) << " " << vg::offset(current_pos) << endl;
+
+
+            } else {
+                // not adding the current position to the tree however checking if the tree position and the current graph
+                // positions are the same
+                pos_t current_pos = vg::pos_t{gbz->graph.get_id(current_node), gbz->graph.get_is_reverse(current_node),
+                                              in_node_index + 1};
+
+
+                if (gbwtgraph::Position::encode(current_pos).value != bptree_search.graph_position.value) {
+                    cout << "tree search " << bptree_search << endl;
+                    cout << "brute " << gbwtgraph::Position::encode(current_pos).value << endl;
+                    cout << "reverse? " << gbz->graph.get_is_reverse(current_node) << endl;
+                    cout << "node len " << gbz->graph.get_length(current_node) << endl;
+                    cout << "The graph position in the tree " << vg::id(bptree_search.graph_position.decode()) << " "
+                         << vg::offset(bptree_search.graph_position.decode()) << " the actual brute force graph position "
+                         << vg::id(current_pos) << " " << vg::offset(current_pos) << endl;
+                }
+
+//            assert(gbwtgraph::Position::encode(current_pos).value == bptree_search.graph_position.value);
             }
 
-            assert(gbwtgraph::Position::encode(current_pos).value == bptree_search.graph_position.value);
+
+
+
+
+
+
+
         }
-
-
-
 
 
 
 
 
     }
+
+
+    cout << tmp1.size() << endl;
+     // sort the items in the tmp1
+    std::sort(tmp1.begin(), tmp1.end(), [](const Run& a, const Run& b) {
+        return a.start_position < b.start_position;
+    });
+
+    // print all the non-unique items in the tmp1
+    for (int i = 0; i < tmp1.size() - 1; i++) {
+        if (tmp1[i].start_position == tmp1[i + 1].start_position){
+            cout << "The non-unique item is: " << tmp1[i] << endl;
+        }
+    }
+
+    // insert all the items in the tmp1 to the bptree
+    for (auto& i : tmp1) {
+        bptree.insert(i, 1);
+    }
+
 
 
     cout << "The number of items in the BPlusTree is: " << bptree.get_bpt_size() << endl;
@@ -1184,121 +1217,6 @@ int main_panindexer(int argc, char **argv) {
 
 
 
-
-
-
-
-
-
-
-
-//    BplusTree<Run> bptree(10);
-//    bptree.insert({5,1}, 3);
-//
-//    bptree.insert({11,5}, 2);
-//
-//    bptree.insert({10,5}, 7);
-//    bptree.print_whole();
-//
-//    cout << "-------------------------------1" << endl;
-//
-//    BplusTree<Run> bptree1(10);
-//    bptree1.insert({5,1}, 3);
-//
-//    bptree1.insert({11,5}, 2);
-//
-//    bptree1.insert({4,1}, 6);
-//    bptree1.print_whole();
-//
-//    cout << "-------------------------------2" << endl;
-//
-//    BplusTree<Run> bptree3(10);
-//    bptree3.insert({5,1}, 3);
-//
-//    bptree3.insert({11,5}, 2);
-//
-//    bptree3.insert({5,1}, 4);
-//    bptree3.print_whole();
-//
-//
-//    cout << "-------------------------------3" << endl;
-//
-//    BplusTree<Run> bptree2(10);
-//    bptree2.insert({5,1}, 3);
-//
-//    bptree2.insert({11,5}, 2);
-//
-//    bptree2.insert({4,1}, 7);
-//    bptree2.print_whole();
-//
-//    cout << "-------------------------------4" << endl;
-//
-//    BplusTree<Run> bptree4(10);
-//    bptree4.insert({5,1}, 3);
-//
-//    bptree4.insert({11,5}, 2);
-//
-//    bptree4.insert({6,1}, 1);
-//    bptree4.print_whole();
-
-
-
-
-
-
-//
-//        for (size_t i = 3; i < 10; i+=2){
-//        bptree.insert({i, 3}, 1);
-//        cout << "The B+ tree is: " << endl;
-//        bptree.print_whole();
-//    }
-//    for (size_t i = 4; i < 9; i+=4){
-//        bptree.insert({i, 3}, 1);
-//        cout << "The B+ tree is: " << endl;
-//        bptree.print_whole();
-//    }
-//
-//    for (size_t i = 30; i > 9; i-=2){
-//        bptree.insert({i, 3}, 1);
-//        cout << "The B+ tree is: " << endl;
-//        bptree.print_whole();
-//    }
-//    for (size_t i = 13; i < 30; i+=2){
-//        bptree.insert({i, 3}, 1);
-//        cout << "The B+ tree is: " << endl;
-//        bptree.print_whole();
-//    }
-
-
-//    for (size_t i = 10; i < 30; i+=2){
-//        bptree.insert({i, 3}, 1);
-//        cout << "The B+ tree is: " << endl;
-//        bptree.print_whole();
-//    }
-//    for (size_t i = 29; i > 12; i-=2){
-//        bptree.insert({i, 3}, 1);
-//        cout << "The B+ tree is: " << endl;
-//        bptree.print_whole();
-//    }
-//
-
-////    bptree.insert({2,4}, 2);
-//    bptree.insert({7,8}, 1);
-//    bptree.insert({5,5}, 1);
-//    bptree.insert({9,5}, 1);
-//    bptree.insert({2,7}, 1);
-//    bptree.print_whole();
-
-
-//    cout << node.is_leaf() << endl;
-//    node.insert({5,2}, 2);
-//    node.print();
-//    node.insert({9,2}, 5);
-//    node.print();
-//    node.insert({7,2}, 2);
-//
-//
-//    node.print();
 
 
     return 0;
