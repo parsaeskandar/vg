@@ -15,9 +15,58 @@
 #define VG_BPLUS_TREE_HPP
 
 #include <iostream>
+#include <gbwtgraph/gbwtgraph.h>
+#include "../gbwtgraph_helper.hpp"
+#include <gbwtgraph/index.h>
 
-bool DEBUG = false;
+// Create a Run struct to store the run data structure for the BPlusTree
+struct Run {
+    size_t start_position;
+    gbwtgraph::Position graph_position;
+//    char run_char; // the character of the run TODO: can handle this with 3 bits instead of 8 bits
 
+    // Operators for the struct
+    bool operator<(const Run &other) const {
+        return start_position < other.start_position;
+    }
+
+//    bool operator==(const Run &other) const {
+//        return start_position == other.start_position;
+//    }
+
+    bool operator==(const Run &other) const {
+        return (start_position == other.start_position && graph_position == other.graph_position);
+    }
+
+
+    Run &operator=(const Run &other) {
+        if (this == &other) {
+            return *this;
+        }
+        start_position = other.start_position;
+        graph_position = other.graph_position;
+//        run_char = other.run_char;
+        return *this;
+    }
+
+    // Set the Run struct to a zero one when it is assigned to 0
+    Run &operator=(int zero) {
+        if (zero == 0) {  // Ensures it only responds to 0
+            start_position = 0;
+            graph_position = gbwtgraph::Position::no_value();
+        }
+        return *this;
+    }
+
+    // print the Run struct
+    friend std::ostream &operator<<(std::ostream &os, const Run &run) {
+        os << "start_position: " << run.start_position
+           << ", graph_position: " << run.graph_position.value;
+
+        return os;
+    }
+
+};
 
 template<typename T>
 class bpNode {
@@ -33,7 +82,6 @@ public:
 
     // destructor
     ~bpNode() {
-        // Clear the children pointers without deleting the actual child nodes
         children.clear();
         items.clear();
     }
@@ -208,9 +256,10 @@ public:
         return items[i];
     }
 
+
     // replace the items in the leaf node with new items
     void replace_items_leaf(vector<T> new_items) {
-        if (DEBUG) cout << "replacing items in leaf node" << endl;
+//        if (DEEBUG) cout << "replacing items in leaf node" << endl;
         items.assign(new_items.begin(), new_items.end());
     }
 
@@ -226,7 +275,7 @@ public:
 
     */
     vector<T> insert(const T &data, size_t run_length) {
-        if (DEBUG) cout << "inserting into node " << data << " " << run_length << endl;
+//        if (DEEBUG) cout << "inserting into node " << data << " " << run_length << endl;
         assert(leaf);
         size_t inserted_index;
         std::vector<T> new_items;
@@ -241,7 +290,7 @@ public:
         }
 
 
-        if (DEBUG) cout << "OOOOOO" << inserted_index << " " << new_items.size() << endl;
+//        if (DEEBUG) cout << "OOOOOO" << inserted_index << " " << new_items.size() << endl;
         // if the new item is added at the end of the node
         if (inserted_index == new_items.size()) {
             if (next != nullptr) {
@@ -269,7 +318,7 @@ public:
     // This is the same as the insert function, however this function change the success boolean to true if the insertion
     // was successful and false otherwise.
     vector<T> insert_success(const T &data, size_t run_length, bool &success) {
-        if (DEBUG) cout << "inserting into node " << data << " " << run_length << endl;
+//        if (DEEBUG) cout << "inserting into node " << data << " " << run_length << endl;
         success = true;
         assert(leaf);
         size_t inserted_index;
@@ -287,7 +336,7 @@ public:
             return new_items;
         }
 
-        if (DEBUG) cout << "OOOOOO" << inserted_index << " " << new_items.size() << endl;
+//        if (DEEBUG) cout << "OOOOOO" << inserted_index << " " << new_items.size() << endl;
         // if the new item is added at the end of the node
         if (new_items.size() < 3 || inserted_index == new_items.size()) {
             if (next != nullptr) {
@@ -342,6 +391,10 @@ public:
         std::cout << "Size: " << items.size() << endl;
     }
 
+    bool is_gap(T run) {
+        return run.graph_position.value == 0;
+    }
+
 private:
     bool leaf;
     size_t degree;
@@ -359,9 +412,7 @@ private:
     }
 
 
-    bool is_gap(T run) {
-        return run.graph_position.value == 0;
-    }
+
 
 
 
@@ -380,9 +431,9 @@ private:
 //        cout << "index: " << index << "len " << len << endl;
 
         if (gap_index - index > 0) {
-            if (DEBUG)
-                cout << "Error: the new run is not inserted correctly. The new run cannot inserted in another run!!"
-                     << endl;
+//            if (DEEBUG)
+//                cout << "Error: the new run is not inserted correctly. The new run cannot inserted in another run!!"
+//                     << endl;
             inserted_index = std::numeric_limits<size_t>::max();
             return new_items;
         }
@@ -400,13 +451,13 @@ private:
 //                    // It should never happen!
 //                    run_length -= (new_items[index].start_position - new_run.start_position);
 //                    new_run.start_position = new_items[index].start_position;
-//                    if (DEBUG) cout << "intersect case 0.0" << endl;
+//                    if (DEEBUG) cout << "intersect case 0.0" << endl;
 //                    new_items = run_insert(new_items, new_run, run_length, inserted_index);
 //                    inserted_index = 0;
 //                    return new_items;
 //                } else {
 //                    // in this case we call the run_insert but for a new run that starts from the start of the next run
-//                    if (DEBUG) cout << "intersect case 0.1" << endl;
+//                    if (DEEBUG) cout << "intersect case 0.1" << endl;
 //                    T temp = new_items[index];
 //                    new_items = run_insert(new_items, new_run, new_items[index].start_position - new_run.start_position, inserted_index);
 //                    if (new_run.start_position + run_length > temp.start_position) {
@@ -421,15 +472,15 @@ private:
 //                }
 //
 //            } else {
-//                if (DEBUG) cout << "intersect case 1" << endl;
+//                if (DEEBUG) cout << "intersect case 1" << endl;
 //                T temp = new_items[index];
 //                new_items = run_insert(new_items, new_run, new_items[index].start_position - new_run.start_position, inserted_index);
 //                run_length -= (temp.start_position - new_run.start_position);
 //                new_run.start_position = temp.start_position;
-//                if (DEBUG) cout << "adding " << new_run << " with len " << run_length << endl;
+//                if (DEEBUG) cout << "adding " << new_run << " with len " << run_length << endl;
 //                new_items = run_insert(new_items, new_run, run_length, inserted_index);
 //                // print all items in new_items
-//                if (DEBUG) {
+//                if (DEEBUG) {
 //                    for (auto &item: new_items) {
 //                        cout << item << " ";
 //                    }
@@ -444,7 +495,7 @@ private:
 
 
         if (new_items.size() == 0) {
-            if (DEBUG) cout << "there is nothing in the node!" << endl;
+//            if (DEEBUG) cout << "there is nothing in the node!" << endl;
             new_items.push_back(new_run);
             new_items.push_back(create_gap(new_run.start_position + run_length));
             inserted_index = 0;
@@ -462,7 +513,7 @@ private:
         if (index == 0) {
 //            if (is_gap(new_items[index])) {
 //                // this is an error case and should not happen
-//                if (DEBUG)
+//                if (DEEBUG)
 //                    cout << "Error: the new run is not inserted correctly. The new run cannot inserted in another run!"
 //                         << endl;
 //                inserted_index = std::numeric_limits<size_t>::max();
@@ -471,25 +522,25 @@ private:
 //            }
             if (prev != nullptr && !is_gap(prev->get_item(prev->get_size() - 1))) {
                 // this is an error case and should not happen
-                if (DEBUG)
-                    cout << "Error: the new run is not inserted correctly. The new run cannot inserted in another run!"
-                         << endl;
+//                if (DEEBUG)
+//                    cout << "Error: the new run is not inserted correctly. The new run cannot inserted in another run!"
+//                         << endl;
                 inserted_index = std::numeric_limits<size_t>::max();
                 return new_items;
 
             }
         } else {
             if (!is_gap(new_items[index - 1])) {
-                if (DEBUG)
-                    cout << "Error: the new run is not inserted correctly. The new run cannot inserted in another run!!"
-                         << endl;
+//                if (DEEBUG)
+//                    cout << "Error: the new run is not inserted correctly. The new run cannot inserted in another run!!"
+//                         << endl;
                 inserted_index = std::numeric_limits<size_t>::max();
                 return new_items;
             }
             if (index == len){
                 if (next != nullptr && new_run.start_position + run_length > next->get_item(0).start_position){
-                    if (DEBUG) cout << "Error: the new run is not inserted correctly. The new run cannot inserted in another run!!"
-                                    << endl;
+//                    if (DEEBUG) cout << "Error: the new run is not inserted correctly. The new run cannot inserted in another run!!"
+//                                    << endl;
                     inserted_index = std::numeric_limits<size_t>::max();
                     return new_items;
                 }
@@ -503,7 +554,7 @@ private:
         // first case is when the new_run doesn't hit previous run or the next run
         if ((index == 0 || new_run.start_position > new_items[index - 1].start_position) &&
             (index == len || new_run.start_position + run_length < new_items[index].start_position)) {
-            if (DEBUG) std::cout << "insert run case 1" << std::endl;
+//            if (DEEBUG) std::cout << "insert run case 1" << std::endl;
             if (index == 0) {
                 new_items.insert(new_items.begin(), new_run);
                 new_items.insert(new_items.begin() + 1, create_gap(new_run.start_position + run_length));
@@ -526,7 +577,7 @@ private:
             // second case is when we hit the previous run end point and not the next run starting point
         else if (index != 0 && new_run.start_position == new_items[index - 1].start_position &&
                  ((index == len || new_run.start_position + run_length < new_items[index].start_position))) {
-            if (DEBUG) std::cout << "insert run case 2" << std::endl;
+//            if (DEEBUG) std::cout << "insert run case 2" << std::endl;
             // the case that index = 1
             if (index == 1) {
                 // if adding after a gap run
@@ -536,7 +587,7 @@ private:
                 return new_items;
             }
 //            else if (index == len){
-//                if (DEBUG) std::cout << "insert run case 2.0" << std::endl;
+//                if (DEEBUG) std::cout << "insert run case 2.0" << std::endl;
 //                // in this case have to remove the gap run and insert the new run in its place and then add a gap for the new run
 //                new_items[index - 1] = new_run;
 //
@@ -547,7 +598,7 @@ private:
 
                 // two cases here, first being the new run graph position not be the same as the previous run graph position
             else if (new_run.graph_position.value != new_items[index - 2].graph_position.value) {
-                if (DEBUG) std::cout << "insert run case 2.1" << std::endl;
+//                if (DEEBUG) std::cout << "insert run case 2.1" << std::endl;
                 // in this case have to remove the gap run and insert the new run in its place and then add a gap for the new run
                 new_items[index - 1] = new_run;
                 inserted_index = index - 1;
@@ -557,7 +608,7 @@ private:
             }
                 // the other case is when the new run graph position is the same as the previous non-gap run graph position
             else if (new_run.graph_position.value == new_items[index - 2].graph_position.value) {
-                if (DEBUG) std::cout << "insert run case 2.2" << std::endl;
+//                if (DEEBUG) std::cout << "insert run case 2.2" << std::endl;
                 // in this case we just have to change the starting position of the gap in the index-1
                 new_items[index - 1].start_position += run_length;
                 inserted_index = index - 1;
@@ -571,10 +622,10 @@ private:
             // third case, when we hit the next run starting point but not the previous one
         else if ((index == 0 || new_run.start_position > new_items[index - 1].start_position) && index != len &&
                  new_run.start_position + run_length == new_items[index].start_position) {
-            if (DEBUG) std::cout << "insert run case 3" << std::endl;
+//            if (DEEBUG) std::cout << "insert run case 3" << std::endl;
             // two cases here, first being the new run graph_position not be the same as the next run graph_position
             if (new_run.graph_position.value != new_items[index].graph_position.value) {
-                if (DEBUG) std::cout << "insert run case 3.1" << std::endl;
+//                if (DEEBUG) std::cout << "insert run case 3.1" << std::endl;
 
                 new_items.insert(new_items.begin() + index, new_run);
                 // in this case we don't need to add a gap after adding the new run
@@ -584,7 +635,7 @@ private:
             }
                 // the other case is when the new run graph_position is the same as the next non-gap run graph_position
             else if (new_run.graph_position.value == new_items[index].graph_position.value) {
-                if (DEBUG) std::cout << "insert run case 3.2" << std::endl;
+//                if (DEEBUG) std::cout << "insert run case 3.2" << std::endl;
                 // in this case we just have to change the starting position of the next non-gap run
                 new_items[index].start_position = new_run.start_position;
                 inserted_index = index;
@@ -598,14 +649,14 @@ private:
             // forth case, which is when we hit both runs from both sides
         else if (new_run.start_position == new_items[index - 1].start_position &&
                  new_run.start_position + run_length == new_items[index].start_position) {
-            if (DEBUG) std::cout << "insert run case 4" << std::endl;
+//            if (DEEBUG) std::cout << "insert run case 4" << std::endl;
 
             // if index = 1 then we do not have to check for the index-2 run
             if (index == 1) {
-                if (DEBUG) std::cout << "insert run case 4.0" << std::endl;
+//                if (DEEBUG) std::cout << "insert run case 4.0" << std::endl;
                 // two cases here too! first being the new run graph_position not be the same as the next run graph_position
                 if (new_run.graph_position.value != new_items[index].graph_position.value) {
-                    if (DEBUG) std::cout << "insert run case 4.0.1" << std::endl;
+//                    if (DEEBUG) std::cout << "insert run case 4.0.1" << std::endl;
                     // in this case we don't need to add a gap after adding the new run
                     new_items[index - 1] = new_run;
                     inserted_index = index - 1;
@@ -613,7 +664,7 @@ private:
                 }
                     // the other case is when the new run graph_position is the same as the next non-gap run graph_position
                 else if (new_run.graph_position.value == new_items[index].graph_position.value) {
-                    if (DEBUG) std::cout << "insert run case 4.0.2" << std::endl;
+//                    if (DEEBUG) std::cout << "insert run case 4.0.2" << std::endl;
                     // in this case we just have to change the starting position of the next non-gap run
                     new_items[index].start_position = new_run.start_position;
                     inserted_index = index - 1;
@@ -624,10 +675,10 @@ private:
 
             // two cases here, first being the new run graph_position not be the same as the previous run graph_position
             if ((new_run.graph_position.value != new_items[index - 2].graph_position.value) || index == 1) {
-                if (DEBUG) std::cout << "insert run case 4.1" << std::endl;
+//                if (DEEBUG) std::cout << "insert run case 4.1" << std::endl;
                 // two cases here too! first being the new run graph_position not be the same as the next run graph_position
                 if (new_run.graph_position.value != new_items[index].graph_position.value) {
-                    if (DEBUG) std::cout << "insert run case 4.1.1" << std::endl;
+//                    if (DEEBUG) std::cout << "insert run case 4.1.1" << std::endl;
 
                     // in this case we don't merge anything, but we need to remove the index-1 gap run
                     new_items[index - 1] = new_run;
@@ -636,7 +687,7 @@ private:
                 }
                     // the other case is when the new run graph_position is the same as the next non-gap run graph_position
                 else if (new_run.graph_position.value == new_items[index].graph_position.value) {
-                    if (DEBUG) std::cout << "insert run case 4.1.2" << std::endl;
+//                    if (DEEBUG) std::cout << "insert run case 4.1.2" << std::endl;
                     // in this case we just have to change the starting position of the next non-gap run and remove the index-1 gap run
                     new_items[index].start_position = new_run.start_position;
                     new_items.erase(new_items.begin() + index - 1);
@@ -647,10 +698,10 @@ private:
             }
                 // the other case is when the new run graph_position is the same as the previous non-gap run graph_position
             else if (new_run.graph_position.value == new_items[index - 2].graph_position.value) {
-                if (DEBUG) std::cout << "insert run case 4.2" << std::endl;
+//                if (DEEBUG) std::cout << "insert run case 4.2" << std::endl;
                 // two cases here too! first being the new run graph_position not be the same as the next run graph_position
                 if (new_run.graph_position.value != new_items[index].graph_position.value) {
-                    if (DEBUG) std::cout << "insert run case 4.2.1" << std::endl;
+//                    if (DEEBUG) std::cout << "insert run case 4.2.1" << std::endl;
 
                     // just remove the index - 1 run
                     new_items.erase(new_items.begin() + index - 1);
@@ -659,7 +710,7 @@ private:
                 }
                     // the other case is when the new run graph_position is the same as the next non-gap run graph_position
                 else if (new_run.graph_position.value == new_items[index].graph_position.value) {
-                    if (DEBUG) std::cout << "insert run case 4.2.2" << std::endl;
+//                    if (DEEBUG) std::cout << "insert run case 4.2.2" << std::endl;
                     // in this case we have to merge 3 runs together!
                     // in this case we only have to remove the index-1 and index runs
                     new_items.erase(new_items.begin() + index - 1);
@@ -669,18 +720,18 @@ private:
                 }
             }
         } else {
-            if (DEBUG) {
-                std::cerr << "Error: the new run is not inserted correctly" << std::endl;
-                // printing some debug information
-                std::cerr << "new run: " << new_run << std::endl;
-                std::cerr << "index: " << index << std::endl;
-                std::cerr << "new items: ";
-                for (auto &item: new_items) {
-                    std::cerr << item << " ";
-                }
-                std::cerr << std::endl;
-
-            }
+//            if (DEEBUG) {
+//                std::cerr << "Error: the new run is not inserted correctly" << std::endl;
+//                // printing some DEEBUG information
+//                std::cerr << "new run: " << new_run << std::endl;
+//                std::cerr << "index: " << index << std::endl;
+//                std::cerr << "new items: ";
+//                for (auto &item: new_items) {
+//                    std::cerr << item << " ";
+//                }
+//                std::cerr << std::endl;
+//
+//            }
             inserted_index = std::numeric_limits<size_t>::max();
             return new_items;
         }
@@ -690,7 +741,7 @@ private:
 
 
     bool merge_item_next(vector<T> &new_items) {
-        if (DEBUG) cout << "merging with the next node" << endl;
+//        if (DEEBUG) cout << "merging with the next node" << endl;
         assert(next != nullptr);
         vector<T> next_node_items = next->get_items();
 
@@ -698,7 +749,7 @@ private:
             return false;
         }
         if (next_node_items[0].start_position < new_items[new_items.size() - 1].start_position) {
-            if (DEBUG) cout << "Error: the next node is not in the correct order!" << endl;
+//            if (DEEBUG) cout << "Error: the next node is not in the correct order!" << endl;
 //            new_items.pop_back();
 
             return false;
@@ -719,7 +770,7 @@ private:
 
     bool merge_item_prev(vector<T> &new_items) {
         assert(prev != nullptr);
-        if (DEBUG) cout << "merging with the prev node" << endl;
+//        if (DEEBUG) cout << "merging with the prev node" << endl;
         vector<T> prev_node_items = prev->get_items();
 //        if (!is_gap(prev_node_items[prev_node_items.size() - 1])){
 //
@@ -747,11 +798,11 @@ private:
 
     // this function handles the insertion of a new item/child into a parent node
     void parent_insert(bpNode<T> *node, T data, bpNode<T> *child) {
-        if (DEBUG) cout << "inserting into parent node" << endl;
+//        if (DEEBUG) cout << "inserting into parent node" << endl;
 
         // parent overflow case
         if (node->get_size() == degree) {
-            if (DEBUG) cout << "overflow on the parent node" << endl;
+//            if (DEEBUG) cout << "overflow on the parent node" << endl;
             // if the parent is full first check for the left sibling
 
             bpNode<T> *new_node = new bpNode<T>(degree, false);
@@ -858,7 +909,7 @@ private:
     // all of these cases. The input node is the node that we want to remove from the tree.
 
     void remove_from_parent(bpNode<T> *node) {
-        if (DEBUG) cout << "removing from parent node" << endl;
+//        if (DEEBUG) cout << "removing from parent node" << endl;
 
         bpNode<T> *parent = node->get_parent();
         assert(parent != nullptr);
@@ -869,18 +920,18 @@ private:
         parent->remove_item(index - 1);
         parent->remove_child(index);
 
-        if (DEBUG) {
-            if (parent->get_size() > 0) {
-                // print all items in the parent node
-                cout << "parent items: ";
-                for (auto &item: parent->get_items()) {
-                    cout << item << " ";
-                }
-                cout << endl;
-
-            }
-
-        }
+//        if (DEEBUG) {
+//            if (parent->get_size() > 0) {
+//                // print all items in the parent node
+//                cout << "parent items: ";
+//                for (auto &item: parent->get_items()) {
+//                    cout << item << " ";
+//                }
+//                cout << endl;
+//
+//            }
+//
+//        }
 
         // If the parent is the root and it becomes empty, make the current node the new root
         if (parent->is_root() && parent->get_size() == 0) {
@@ -903,7 +954,7 @@ private:
 
     // This function handles the underflow of a non-leaf (parent) node.
     void handle_parent_underflow(bpNode<T> *node) {
-        if (DEBUG) cout << "handling parent underflow" << endl;
+//        if (DEEBUG) cout << "handling parent underflow" << endl;
 
         assert(!node->is_leaf());
 
@@ -931,7 +982,7 @@ private:
 
         // Borrow from the left sibling
         if (index > 0 && parent->get_child(index - 1)->get_size() > degree / 2) {
-            if (DEBUG) cout << "borrowing from the left sibling (parent underflow)" << endl;
+//            if (DEEBUG) cout << "borrowing from the left sibling (parent underflow)" << endl;
 
             bpNode<T> *left_sibling = parent->get_child(index - 1);
 
@@ -948,20 +999,20 @@ private:
             node->add_child(borrowed_child, 0);
 
 
-            if (DEBUG) {
-                // print all items in the node
-                cout << "node items in the node that just got its item/child from its leftsibling: ";
-                for (auto &item: node->get_items()) {
-                    cout << item << " ";
-                }
-            }
+//            if (DEEBUG) {
+//                // print all items in the node
+//                cout << "node items in the node that just got its item/child from its leftsibling: ";
+//                for (auto &item: node->get_items()) {
+//                    cout << item << " ";
+//                }
+//            }
 
             parent->change_item(borrowed_item, index - 1);
 
 
             // Borrow from the right sibling
         } else if (index < parent->get_size() && parent->get_child(index + 1)->get_size() > degree / 2) {
-            if (DEBUG) cout << "borrowing from the right sibling (parent underflow)" << endl;
+//            if (DEEBUG) cout << "borrowing from the right sibling (parent underflow)" << endl;
 
             bpNode<T> *right_sibling = parent->get_child(index + 1);
             T borrowed_item = right_sibling->get_item(0);
@@ -978,7 +1029,7 @@ private:
 
             // Merge with the left sibling
         } else if (index > 0) {
-            if (DEBUG) cout << "merging with the left sibling (parent underflow)" << endl;
+//            if (DEEBUG) cout << "merging with the left sibling (parent underflow)" << endl;
 
             bpNode<T> *left_sibling = parent->get_child(index - 1);
             left_sibling->add_item(parent->get_item(index - 1));
@@ -989,12 +1040,12 @@ private:
                 left_sibling->add_child(node->get_child(i + 1));
             }
 
-            if (DEBUG) {
-                cout << "left sibling items" << endl;
-                for (auto &item: left_sibling->get_items()) {
-                    cout << item << " ";
-                }
-            }
+//            if (DEEBUG) {
+//                cout << "left sibling items" << endl;
+//                for (auto &item: left_sibling->get_items()) {
+//                    cout << item << " ";
+//                }
+//            }
 
             // handle the parent of the newly added children
             for (int i = 0; i < left_sibling->get_size() + 1; i++) {
@@ -1006,7 +1057,7 @@ private:
 
             // Merge with the right sibling
         } else if (index < parent->get_size()) {
-            if (DEBUG) cout << "merging with the right sibling (parent underflow)" << endl;
+//            if (DEEBUG) cout << "merging with the right sibling (parent underflow)" << endl;
 
             bpNode<T> *right_sibling = parent->get_child(index + 1);
 
@@ -1037,10 +1088,10 @@ private:
 
         assert(node->is_leaf());
 
-        if (DEBUG) cout << "underflow in the leaf node" << endl;
-        if (DEBUG)
-            cout << "node size: " << node->get_size() << " node first item " << node->get_item(0) << node->is_root()
-                 << endl;
+//        if (DEEBUG) cout << "underflow in the leaf node" << endl;
+//        if (DEEBUG)
+//            cout << "node size: " << node->get_size() << " node first item " << node->get_item(0) << node->is_root()
+//                 << endl;
 
         if (node->is_root()) {
             if (node->get_size() == 0) {
@@ -1060,12 +1111,12 @@ private:
         int index = node->find_index_in_parent();
 
 
-        if (DEBUG) cout << index << endl;
+//        if (DEEBUG) cout << index << endl;
 
         // the left siblings exists and has enough items to borrow
         if (index > 0 && parent->get_child(index - 1)->get_size() > degree / 2) {
             // borrow from the left sibling
-            if (DEBUG) cout << "borrowing from the left sibling" << endl;
+//            if (DEEBUG) cout << "borrowing from the left sibling" << endl;
 
             bpNode<T> *left_sibling = parent->get_child(index - 1);
 
@@ -1081,7 +1132,7 @@ private:
             // the right sibling exists and has enough items to borrow
         } else if (index < parent->get_size() && parent->get_child(index + 1)->get_size() > degree / 2) {
             // borrow from the right sibling
-            if (DEBUG) cout << "borrowing from the right sibling" << endl;
+//            if (DEEBUG) cout << "borrowing from the right sibling" << endl;
 
             bpNode<T> *right_sibling = parent->get_child(index + 1);
 
@@ -1099,7 +1150,7 @@ private:
             // left sibling exists and we can merge with it
         } else if (index > 0) {
             // merge with the left sibling
-            if (DEBUG) cout << "merging with the left sibling" << endl;
+//            if (DEEBUG) cout << "merging with the left sibling" << endl;
             bpNode<T> *left_sibling = parent->get_child(index - 1);
 
 
@@ -1116,7 +1167,7 @@ private:
                 node->get_next()->set_prev(left_sibling);
             }
 
-            if (DEBUG) cout << "removing the node with the first item: " << node->get_item(0) << endl;
+//            if (DEEBUG) cout << "removing the node with the first item: " << node->get_item(0) << endl;
             remove_from_parent(node);
             delete node;
 
@@ -1128,7 +1179,7 @@ private:
             // right sibling exists and we can merge with it
         } else if (index < parent->get_size()) {
             // merge with the right sibling
-            if (DEBUG) cout << "merging with the right sibling" << endl;
+//            if (DEEBUG) cout << "merging with the right sibling" << endl;
             bpNode<T> *right_sibling = parent->get_child(index + 1);
 
             assert(right_sibling->get_prev() == node);
@@ -1226,13 +1277,13 @@ public:
                 return success;
             }
             // print the items in inserted_items
-            if (DEBUG) for (auto &item: inserted_items) { cout << "item: " << item << endl; }
+//            if (DEEBUG) for (auto &item: inserted_items) { cout << "item: " << item << endl; }
 
             if (inserted_items.size() <= degree) {
                 leaf->replace_items_leaf(inserted_items);
             } else {
                 // split the node
-                if (DEBUG) cout << "splitting the node" << endl;
+//                if (DEEBUG) cout << "splitting the node" << endl;
                 bpNode<T> *new_node = new bpNode<T>(degree, true);
                 // the new_node items are the second half of the leaf items
                 vector<T> new_node_items;
@@ -1251,7 +1302,7 @@ public:
                 }
 
                 // print all items in inserted_items
-                if (DEBUG) for (auto &item: inserted_items) { cout << "ITEM: " << item << endl; }
+//                if (DEEBUG) for (auto &item: inserted_items) { cout << "ITEM: " << item << endl; }
 
                 // change the items of the nodes
                 leaf->replace_items_leaf(inserted_items);
@@ -1299,14 +1350,15 @@ public:
 
             // handle the underflow of the next node
             if (leaf->get_next() != nullptr && leaf->get_next()->is_underflowing()) {
-                if (DEBUG) cout << "underflow in the next node" << endl;
+
+//                if (DEEBUG) cout << "underflow in the next node" << endl;
                 leaf_underflow(leaf->get_next());
             }
 
 
             // handle the underflow
             if (leaf->is_underflowing()) {
-                if (DEBUG) cout << "underflow in the working node" << endl;
+//                if (DEEBUG) cout << "underflow in the working node" << endl;
                 leaf_underflow(leaf);
             }
 
@@ -1355,6 +1407,28 @@ public:
             }
         }
         return size;
+    }
+
+    size_t get_bpt_run_count() {
+        return get_run_count(this->root);
+    }
+
+    size_t get_run_count(bpNode<T> *cursor) {
+        size_t count = 0;
+        if (cursor != NULL) {
+            if (cursor->is_leaf()) {
+                for (int i = 0; i < cursor->get_size(); ++i) {
+                    if (cursor->get_item(i).graph_position.value != 0) {
+                        count++;
+                    }
+                }
+            } else {
+                for (int i = 0; i < cursor->get_size() + 1; ++i) {
+                    count += get_run_count(cursor->get_child(i));
+                }
+            }
+        }
+        return count;
     }
 
 
