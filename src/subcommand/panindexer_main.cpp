@@ -45,7 +45,7 @@ void help_panindexer(char **argv) {
          << "    -i, --index FILE              input index file" << endl
          << "    -k, --kmer-length N            length of the kmers in the index [default 29]" << endl
          << "    -t, --threads N          number of threads to use [1]" << endl
-         << "    -b, --build-index             build the index" << endl;
+         << "    -u, --use-index FILE             use this index" << endl;
 }
 
 // This function is a version of canonical_kmers function from gbwtgraph library but in this version we separate the kmer
@@ -933,7 +933,8 @@ int main_panindexer(int argc, char **argv) {
     size_t k = 31; // TODO: change the default value
     string graph_file = argv[2];
     string index_file;
-    bool build_index = false;
+    string main_index;
+    bool build_index = true;
 
     optind = 2; // force optind past command positional argument
     while (true) {
@@ -943,11 +944,11 @@ int main_panindexer(int argc, char **argv) {
                         {"kmer-length", required_argument, 0, 'k'},
                         {"index",       required_argument, 0, 'i'},
                         {"threads",     required_argument, 0, 't'},
-                        {"build-index", no_argument, 0, 'b'},
+                        {"use-index", required_argument, 0, 'u'},
                         {0, 0,                             0, 0}
                 };
         int option_index = 0;
-        int c = getopt_long(argc, argv, "g:k:i:t:b", long_options, &option_index);
+        int c = getopt_long(argc, argv, "g:k:i:t:u:", long_options, &option_index);
 
         if (c == -1) { break; }
 
@@ -965,8 +966,9 @@ int main_panindexer(int argc, char **argv) {
             case 'i':
                 index_file = optarg;
                 break;
-            case 'b':
-                build_index = true;
+            case 'u':
+                build_index = false;
+                main_index = optarg;
                 break;
             case 'h':
             case '?':
@@ -1166,7 +1168,7 @@ int main_panindexer(int argc, char **argv) {
         tag_array.serialize(std::cout);
     } else {
         vg::TagArray tag_array;
-        std::ifstream in_ds("/Users/seeskand/Documents/pangenome-index/test_data/1mb.ser");
+        std::ifstream in_ds(main_index);
         tag_array.load(in_ds);
 
 //    tag_array.query(4, 9);
