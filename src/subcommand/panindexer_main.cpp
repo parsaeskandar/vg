@@ -44,7 +44,8 @@ void help_panindexer(char **argv) {
          << "    -g, --graph FILE              input graph file" << endl
          << "    -i, --index FILE              input index file" << endl
          << "    -k, --kmer-length N            length of the kmers in the index [default 29]" << endl
-         << "    -t, --threads N          number of threads to use [1]" << endl;
+         << "    -t, --threads N          number of threads to use [1]" << endl
+         << "    -b, --build-index             build the index" << endl;
 }
 
 // This function is a version of canonical_kmers function from gbwtgraph library but in this version we separate the kmer
@@ -121,7 +122,7 @@ unique_kmers_parallel(const GBWTGraph &graph, vg::hash_map<gbwtgraph::Key64::val
                     index[entry.first] = entry.second;
                 } else if (it->second != entry.second) {
                     // remove the kmer from the index
-                    index.erase(it); // TODO: check the time complexity of this
+                    index.erase(it);
                     duplicates.insert(entry.first);
                 }
             }
@@ -201,40 +202,6 @@ vector<pair<uint64_t, uint64_t>> sort_end_of_seq(vector<pair<uint64_t, uint64_t>
          });
 
     return OCC;
-}
-
-
-
-
-// this function iterate over all of the kmers in the r-index and add the runs to the BPlusTree recursively
-// TODO: make this function parallel
-void kmers_to_bplustree(r_index<> &idx, BplusTree<Run> &bptree,
-                        vg::hash_map<gbwtgraph::Key64::value_type, gbwtgraph::Position> &index, size_t k,
-                        range_t interval, const string current_kmer) {
-    if (current_kmer.length() == k && interval.first <= interval.second) {
-        if (debug) {
-            cerr << "The current kmer is: " << current_kmer << endl;
-            cerr << "The interval is: " << interval.first << " " << interval.second << endl;
-        }
-        // creating the kmer with the key type
-        gbwtgraph::Key64 kmer_key = gbwtgraph::Key64::encode(current_kmer);
-        // check if the kmer_key is in the index and if it is add the run to the BPlusTree
-        auto it = index.find(kmer_key.get_key());
-        if (it != index.end()) {
-            Run run = {interval.first, it->second};
-            if (debug)
-                cerr << "The adding run is: " << run << " with len " << interval.second - interval.first + 1 << endl;
-            bptree.insert(run, interval.second - interval.first + 1); // CHECK
-        }
-        return;
-    }
-
-    for (char base: {'A', 'C', 'G', 'T'}) {
-
-        if (interval.first <= interval.second) {
-            kmers_to_bplustree(idx, bptree, index, k, idx.LF(interval, base), base + current_kmer);
-        }
-    }
 }
 
 
@@ -840,7 +807,7 @@ void traverse_sequences(gbwtgraph::GBZ &gbz, BplusTree<Run> &bptree, r_index<> &
 }
 
 void traverse_sequences_parallel(gbwtgraph::GBZ &gbz, BplusTree<Run> &bptree, r_index<> &idx,
-                        vector<pair<uint64_t, uint64_t>> &end_of_seq) {
+                                 vector<pair<uint64_t, uint64_t>> &end_of_seq) {
     auto number_of_sequences = end_of_seq.size();
     int traverse = 0;
 
@@ -945,8 +912,7 @@ int count_bits_using_bitset(T value) {
     return bits.count();
 }
 
-void bin(unsigned int n)
-{
+void bin(unsigned int n) {
     /* step 1 */
     if (n > 1)
         bin(n / 2);
@@ -954,8 +920,6 @@ void bin(unsigned int n)
     /* step 2 */
     cerr << n % 2;
 }
-
-
 
 
 int main_panindexer(int argc, char **argv) {
@@ -969,6 +933,7 @@ int main_panindexer(int argc, char **argv) {
     size_t k = 31; // TODO: change the default value
     string graph_file = argv[2];
     string index_file;
+    bool build_index = false;
 
     optind = 2; // force optind past command positional argument
     while (true) {
@@ -978,10 +943,11 @@ int main_panindexer(int argc, char **argv) {
                         {"kmer-length", required_argument, 0, 'k'},
                         {"index",       required_argument, 0, 'i'},
                         {"threads",     required_argument, 0, 't'},
+                        {"build-index", no_argument, 0, 'b'},
                         {0, 0,                             0, 0}
                 };
         int option_index = 0;
-        int c = getopt_long(argc, argv, "g:k:i:t:", long_options, &option_index);
+        int c = getopt_long(argc, argv, "g:k:i:t:b", long_options, &option_index);
 
         if (c == -1) { break; }
 
@@ -999,6 +965,9 @@ int main_panindexer(int argc, char **argv) {
             case 'i':
                 index_file = optarg;
                 break;
+            case 'b':
+                build_index = true;
+                break;
             case 'h':
             case '?':
             default:
@@ -1013,100 +982,6 @@ int main_panindexer(int argc, char **argv) {
 //    randomized_test_bplustree(num_tests);
 //    return 0;
 
-
-    size_t offset = 1023; // 10 bits
-    bool flag = true; // 1 bit
-    int64_t node_id = 8871655; // Dynamically calculated bits
-    uint8_t length = 127; // 8 bits
-
-
-//    std::vector<gbwt::byte_type> encoded_runs;
-//    gbwt::size_type encoded = (offset) | (flag << 10) | (length << 11) |
-//                           (node_id << 19);
-//    cerr << encoded << " " << endl;
-//    bin(encoded);
-//
-//
-//
-//    vector< gbwt::byte_type > test;
-//
-//    gbwt::ByteCode::write(test, encoded);
-//
-//    // print all items in test
-//    for (auto i = test.begin(); i != test.end(); ++i)
-//        cerr << +*i << ' ';
-//
-//    cerr << endl;
-//
-//    gbwt::size_type decc;
-//    gbwt::size_type ind = 0;
-//    decc = gbwt::ByteCode::read(test, ind);
-//
-////    gbwt::size_type decc;
-//
-//    cerr << decc << " " << endl;
-//    bin(decc);
-//
-//    size_t decoded_offset = decc & ((1LL << 10) - 1);
-//    bool decoded_flag = (decc >> 10) & 0x1;
-//    uint8_t decoded_length = (decc >> 11) & 0xFF;
-//    int64_t decoded_node_id = (decc >> 19);
-//
-//    // Print the decoded values
-//    std::cerr << "Decoded offset: " << decoded_offset << std::endl;
-//    std::cerr << "Decoded flag: " << decoded_flag << std::endl;
-//    std::cerr << "Decoded length: " << static_cast<int>(decoded_length) << std::endl;
-//    std::cerr << "Decoded node ID: " << decoded_node_id << std::endl;
-
-
-//    size_t decoded_offset = encoded & ((1LL << 10) - 1);
-//    bool decoded_flag = (encoded >> 10) & 0x1;
-//    uint8_t decoded_length = (encoded >> 11) & 0xFF;
-//    int64_t decoded_node_id = (encoded >> 19);
-//
-//    // Print the decoded values
-//    std::cerr << "Decoded offset: " << decoded_offset << std::endl;
-//    std::cerr << "Decoded flag: " << decoded_flag << std::endl;
-//    std::cerr << "Decoded length: " << static_cast<int>(decoded_length) << std::endl;
-//    std::cerr << "Decoded node ID: " << decoded_node_id << std::endl;
-
-//    gbwt::ByteCode::write(encoded_runs, test);
-
-
-
-
-    unique_ptr<gbwtgraph::GBZ> gbz;
-    cerr << "Loading the graph file" << endl;
-    auto input = vg::io::VPKG::try_load_first<gbwtgraph::GBZ, gbwtgraph::GBWTGraph, HandleGraph>(graph_file);
-    gbz = std::move(get<0>(input));
-
-
-    bool progress = true;
-    auto threshold = 0;
-    auto space_efficient_counting = false;
-
-    typedef gbwtgraph::Key64::value_type kmer_type;
-
-    hash_map<kmer_type, gbwtgraph::Position> index;
-    cerr << "Computing the unique kmers in the graph" << endl;
-
-#if TIME
-    auto time1 = chrono::high_resolution_clock::now();
-#endif
-
-    unique_kmers_parallel<gbwtgraph::Key64>(gbz->graph, index, k);
-
-#if TIME
-    auto time2 = chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration1 = time2 - time1;
-    std::cerr << "Indexing unique kmers took " << duration1.count() << " seconds" << std::endl;
-#endif
-
-
-
-
-    BplusTree<Run> bptree(15); // TODO: determine the BPlusTree degree
-
     cerr << "Reading the rindex file" << endl;
     std::ifstream in(index_file);
     bool fast;
@@ -1115,194 +990,225 @@ int main_panindexer(int argc, char **argv) {
     r_index<> idx;
     idx.load(in);
 
+
+    if (build_index) {
+
+
+        unique_ptr<gbwtgraph::GBZ> gbz;
+        cerr << "Loading the graph file" << endl;
+        auto input = vg::io::VPKG::try_load_first<gbwtgraph::GBZ, gbwtgraph::GBWTGraph, HandleGraph>(graph_file);
+        gbz = std::move(get<0>(input));
+
+
+        bool progress = true;
+        auto threshold = 0;
+        auto space_efficient_counting = false;
+
+        typedef gbwtgraph::Key64::value_type kmer_type;
+
+        hash_map<kmer_type, gbwtgraph::Position> index;
+        cerr << "Computing the unique kmers in the graph" << endl;
+
 #if TIME
-    auto time3 = chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration2 = time3 - time2;
-    std::cerr << "Reading r-index took " << duration2.count() << " seconds" << std::endl;
+        auto time1 = chrono::high_resolution_clock::now();
+#endif
+
+        unique_kmers_parallel<gbwtgraph::Key64>(gbz->graph, index, k);
+
+#if TIME
+        auto time2 = chrono::high_resolution_clock::now();
+        std::chrono::duration<double> duration1 = time2 - time1;
+        std::cerr << "Indexing unique kmers took " << duration1.count() << " seconds" << std::endl;
 #endif
 
 
-    cerr << "Adding the kmers to the BPlusTree" << endl;
+        BplusTree<Run> bptree(15); // TODO: determine the BPlusTree degree
+
+
+
+
+        cerr << "Adding the kmers to the BPlusTree" << endl;
 //    kmers_to_bplustree(idx, bptree, index, k, {0, idx.bwt_size() - 1}, "");
-    parallel_kmers_to_bplustree(idx, bptree, index, k, {0, idx.bwt_size() - 1});
+        parallel_kmers_to_bplustree(idx, bptree, index, k, {0, idx.bwt_size() - 1});
 
 
 #if TIME
-    auto time4 = chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration3 = time4 - time3;
-    std::cerr << "Adding kmers to bptree took " << duration3.count() << " seconds" << std::endl;
+        auto time4 = chrono::high_resolution_clock::now();
+        std::chrono::duration<double> duration3 = time4 - time2;
+        std::cerr << "Adding kmers to bptree took " << duration3.count() << " seconds" << std::endl;
 #endif
 
 
-    // computing some statistics
-    auto unique_kmers_size = index.size();
-    auto bptree_items = bptree.get_bpt_size();
-    auto bwt_size = idx.bwt_size();
-    size_t tag_arrays_covered = 0;
+        // computing some statistics
+        auto unique_kmers_size = index.size();
+        auto bptree_items = bptree.get_bpt_size();
+        auto bwt_size = idx.bwt_size();
+        size_t tag_arrays_covered = 0;
 
-    cerr << "The number of unique kmers in the index is: " << unique_kmers_size << endl;
-    cerr << "The number of items in the BPlusTree is: " << bptree_items << endl;
-    cerr << "The size of the BWT is: " << bwt_size << endl;
+        cerr << "The number of unique kmers in the index is: " << unique_kmers_size << endl;
+        cerr << "The number of items in the BPlusTree is: " << bptree_items << endl;
+        cerr << "The size of the BWT is: " << bwt_size << endl;
 
 
-    cerr << "calculating the fraction of the tag arrays covered" << endl;
-    // calculating the fraction of the tag arrays covered
-    for (auto it = bptree.begin(); it != bptree.end(); ++it) {
-        Run current_item = *it;
-        if (current_item.graph_position.value != 0) { // Check if the current item is not a gap
-            auto next_it = it;
-            ++next_it; // Move to the next element
-            if (next_it != bptree.end()) { // Check if the next element is not the end
-                Run next_item = *next_it; // Get the next item
-                tag_arrays_covered += (next_item.start_position - current_item.start_position);
+        cerr << "calculating the fraction of the tag arrays covered" << endl;
+        // calculating the fraction of the tag arrays covered
+        for (auto it = bptree.begin(); it != bptree.end(); ++it) {
+            Run current_item = *it;
+            if (current_item.graph_position.value != 0) { // Check if the current item is not a gap
+                auto next_it = it;
+                ++next_it; // Move to the next element
+                if (next_it != bptree.end()) { // Check if the next element is not the end
+                    Run next_item = *next_it; // Get the next item
+                    tag_arrays_covered += (next_item.start_position - current_item.start_position);
+                }
             }
         }
-    }
 
 
-    cerr << "The fraction of the tag arrays covered by unique kmers is: " << tag_arrays_covered << " / " << bwt_size << " = "
-         << (double) tag_arrays_covered / bwt_size << endl;
+        cerr << "The fraction of the tag arrays covered by unique kmers is: " << tag_arrays_covered << " / " << bwt_size
+             << " = "
+             << (double) tag_arrays_covered / bwt_size << endl;
 
 
 #if TIME
-    auto time5 = chrono::high_resolution_clock::now();
+        auto time5 = chrono::high_resolution_clock::now();
 #endif
-    cerr << "Extending the kmers on the graph" << endl;
-    auto extension_candidates = extend_kmers_bfs_parallel(gbz->graph, idx, bptree, 1024);
+        cerr << "Extending the kmers on the graph" << endl;
+        auto extension_candidates = extend_kmers_bfs_parallel(gbz->graph, idx, bptree, 1024);
 
 #if TIME
-    auto time6 = chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration4 = time6 - time5;
-    std::cerr << "Extending kmers took " << duration4.count() << " seconds" << std::endl;
+        auto time6 = chrono::high_resolution_clock::now();
+        std::chrono::duration<double> duration4 = time6 - time5;
+        std::cerr << "Extending kmers took " << duration4.count() << " seconds" << std::endl;
 #endif
 
 
 //    cerr << "The number of items in the BPlusTree is: " << bptree.get_bpt_size() << endl;
-    tag_arrays_covered = 0;
+        tag_arrays_covered = 0;
 
-    cerr << "calculating the fraction of the tag arrays covered after one extension" << endl;
-    // calculating the fraction of the tag arrays covered
-    for (auto it = bptree.begin(); it != bptree.end(); ++it) {
-        Run current_item = *it;
-        if (current_item.graph_position.value != 0) { // Check if the current item is not a gap
-            auto next_it = it;
-            ++next_it; // Move to the next element
-            if (next_it != bptree.end()) { // Check if the next element is not the end
-                Run next_item = *next_it; // Get the next item
-                tag_arrays_covered += (next_item.start_position - current_item.start_position);
+        cerr << "calculating the fraction of the tag arrays covered after one extension" << endl;
+        // calculating the fraction of the tag arrays covered
+        for (auto it = bptree.begin(); it != bptree.end(); ++it) {
+            Run current_item = *it;
+            if (current_item.graph_position.value != 0) { // Check if the current item is not a gap
+                auto next_it = it;
+                ++next_it; // Move to the next element
+                if (next_it != bptree.end()) { // Check if the next element is not the end
+                    Run next_item = *next_it; // Get the next item
+                    tag_arrays_covered += (next_item.start_position - current_item.start_position);
 //                cerr << "The current item is: " << current_item << " NEXT " << next_item << endl;
 //                if (next_item.start_position - current_item.start_position > 500){
 //                    cerr << "The current item is: " << current_item << " The next item is: " << next_item << endl;
 //                }
+                }
             }
         }
-    }
 
-    cerr << "The fraction of the tag arrays covered after extending the kmers is: " << tag_arrays_covered << " / " << bwt_size << " = "
-         << (double) tag_arrays_covered / bwt_size << endl;
-
-
-    string pattern = "$";
+        cerr << "The fraction of the tag arrays covered after extending the kmers is: " << tag_arrays_covered << " / "
+             << bwt_size << " = "
+             << (double) tag_arrays_covered / bwt_size << endl;
 
 
-    // get the ISA values for the end of each sequence by searching for pattern # and locating the results
-    auto OCC = idx.ISA(pattern);
+        string pattern = "$";
 
-    // using the sort_end_of_seq function
-    // the first item in the nth element of this is the end of the nth sequence in the bwt
-    auto end_of_seq = sort_end_of_seq(OCC);
+
+        // get the ISA values for the end of each sequence by searching for pattern # and locating the results
+        auto OCC = idx.ISA(pattern);
+
+        // using the sort_end_of_seq function
+        // the first item in the nth element of this is the end of the nth sequence in the bwt
+        auto end_of_seq = sort_end_of_seq(OCC);
 
 #if TIME
-    auto time7 = chrono::high_resolution_clock::now();
+        auto time7 = chrono::high_resolution_clock::now();
 #endif
 
-    traverse_sequences_parallel(*gbz, bptree, idx, end_of_seq);
+        traverse_sequences_parallel(*gbz, bptree, idx, end_of_seq);
 #if TIME
-    auto time8 = chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration5 = time8 - time7;
-    std::cerr << "Traversing all paths and fill all the gaps took " << duration5.count() << " seconds" << std::endl;
+        auto time8 = chrono::high_resolution_clock::now();
+        std::chrono::duration<double> duration5 = time8 - time7;
+        std::cerr << "Traversing all paths and fill all the gaps took " << duration5.count() << " seconds" << std::endl;
 #endif
 
 
+        cerr << "The final number of items in the BPlusTree is: " << bptree.get_bpt_size() << endl;
+        tag_arrays_covered = 0;
 
-
-    cerr << "The final number of items in the BPlusTree is: " << bptree.get_bpt_size() << endl;
-    tag_arrays_covered = 0;
-
-    cerr << "calculating the fraction of the tag arrays covered " << endl;
-    // calculating the fraction of the tag arrays covered
-    for (auto it = bptree.begin(); it != bptree.end(); ++it) {
-        Run current_item = *it;
-        if (current_item.graph_position.value != 0) { // Check if the current item is not a gap
-            auto next_it = it;
-            ++next_it; // Move to the next element
-            if (next_it != bptree.end()) { // Check if the next element is not the end
-                Run next_item = *next_it; // Get the next item
-                tag_arrays_covered += (next_item.start_position - current_item.start_position);
-                // print the decoded items of current_item and next item
-                pos_t t1 = current_item.graph_position.decode();
-                cerr << "The current item is: " << current_item << endl;
-                cerr << "node id: " << vg::id(t1) << " offset " << vg::offset(t1) << " rev? " << vg::is_rev(t1) << endl;
+        cerr << "calculating the fraction of the tag arrays covered " << endl;
+        // calculating the fraction of the tag arrays covered
+        for (auto it = bptree.begin(); it != bptree.end(); ++it) {
+            Run current_item = *it;
+            if (current_item.graph_position.value != 0) { // Check if the current item is not a gap
+                auto next_it = it;
+                ++next_it; // Move to the next element
+                if (next_it != bptree.end()) { // Check if the next element is not the end
+                    Run next_item = *next_it; // Get the next item
+                    tag_arrays_covered += (next_item.start_position - current_item.start_position);
+                    // print the decoded items of current_item and next item
+                    pos_t t1 = current_item.graph_position.decode();
+//                cerr << "The current item is: " << current_item << endl;
+//                cerr << "node id: " << vg::id(t1) << " offset " << vg::offset(t1) << " rev? " << vg::is_rev(t1) << endl;
 
 //                if (next_item.start_position - current_item.start_position > 500){
 //                    cerr << "The current item is: " << current_item << " The next item is: " << next_item << endl;
 //                }
+                }
             }
         }
-    }
 
-    cerr << "The fraction of the tag arrays covered after filling the gaps is: " << tag_arrays_covered << " / " << bwt_size << " = "
-         << (double) tag_arrays_covered / bwt_size << endl;
+        cerr << "The fraction of the tag arrays covered after filling the gaps is: " << tag_arrays_covered << " / "
+             << bwt_size << " = "
+             << (double) tag_arrays_covered / bwt_size << endl;
 
-    vg::TagArray tag_array;
-//    tag_array.load_bptree(bptree, idx.bwt_size());
-//
-//    tag_array.serialize(std::cout);
+        vg::TagArray tag_array;
+        tag_array.load_bptree(bptree, idx.bwt_size());
 
-    std::ifstream in_ds("/Users/seeskand/Documents/pangenome-index/test_data/test.ser");
-    tag_array.load(in_ds);
+        tag_array.serialize(std::cout);
+    } else {
+        vg::TagArray tag_array;
+        std::ifstream in_ds("/Users/seeskand/Documents/pangenome-index/test_data/1mb.ser");
+        tag_array.load(in_ds);
 
 //    tag_array.query(4, 9);
-    auto generate_random_kmer = [](int k, const std::string& alphabet) {
-        std::string kmer;
         std::default_random_engine generator(static_cast<unsigned>(std::time(0)));
-        std::uniform_int_distribution<int> distribution(0, alphabet.size() - 1);
+        std::uniform_int_distribution<int> distribution(0, 3);
+        auto generate_random_kmer = [&](int k, const std::string &alphabet) {
+            std::string kmer;
 
-        for (int i = 0; i < k; ++i) {
-            kmer += alphabet[distribution(generator)];
+            for (int i = 0; i < k; ++i) {
+                kmer += alphabet[distribution(generator)];
+            }
+
+            return kmer;
+        };
+
+        int num_kmers = 1000000;
+        std::string alphabet = "ACGT";
+
+        std::vector<std::string> kmers;
+        kmers.reserve(num_kmers);
+        for (int i = 0; i < num_kmers; ++i) {
+            kmers.push_back(generate_random_kmer(10, alphabet));
         }
 
-        return kmer;
-    };
+        for (auto &kmer: kmers) {
 
-    int num_kmers = 1000;
-    std::string alphabet = "ACGT";
 
-    std::vector<std::string> kmers;
-    kmers.reserve(num_kmers);
-    for (int i = 0; i < num_kmers; ++i) {
-        kmers.push_back(generate_random_kmer(29, alphabet));
-    }
-
-    for (auto& kmer: kmers) {
-        cerr << "The kmer is: " << kmer << endl;
-
-        //find the interval in the bwt
-        auto range = idx.count(kmer);
+            //find the interval in the bwt
+            auto range = idx.count(kmer);
+//        cout << range.first << " " << range.second << endl;
 
 
 
-        if (range.first <= range.second){
-            cout << "bwt range is " << range.first << " " << range.second << endl;
-            tag_array.query(range.first, range.second);
+            if (range.first <= range.second) {
+//            cerr << "The kmer is: " << kmer << endl;
+//            cout << "bwt range is " << range.first << " " << range.second << endl;
+                tag_array.query(range.first, range.second);
+            }
+
         }
-
     }
-
-
-
-
-
+//    exit(0);
 
 
 
