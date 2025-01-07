@@ -2320,6 +2320,7 @@ namespace vg {
             auto annotation = from.get_annotation("secondary");
             assert(annotation.first == multipath_alignment_t::Bool);
             to.set_is_secondary(*((bool*) annotation.second));
+            clear_annotation(to, "secondary");
         }
     }
 
@@ -3856,6 +3857,14 @@ namespace vg {
                     cerr << "validation failure on topological order" << endl;
 #endif
                     return false;
+                }
+                for (const auto& connection : subpath.connection()) {
+                    if (connection.next() <= i) {
+#ifdef debug_verbose_validation
+                        cerr << "validation failure on connection topological order" << endl;
+#endif
+                        return false;
+                    }
                 }
             }
         }

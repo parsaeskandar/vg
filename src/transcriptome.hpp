@@ -14,9 +14,9 @@
 #include <bdsg/overlays/path_position_overlays.hpp>
 #include <sparsepp/spp.h>
 
-#include "../vg.hpp"
-#include "../types.hpp"
-#include "../gbwt_helper.hpp"
+#include "vg.hpp"
+#include "types.hpp"
+#include "gbwt_helper.hpp"
 
 namespace vg {
 
@@ -281,7 +281,7 @@ class Transcriptome {
         /// Parse gtf/gff3 attribute value.
         string parse_attribute_value(const string & attribute, const string & name) const;
 
-        /// Returns the the mean node length of the graph
+        /// Returns the mean node length of the graph
         float mean_node_length() const;
 
         /// Adds the exon coordinates to a transcript.
@@ -295,7 +295,12 @@ class Transcriptome {
         /// are ordered in reverse.
         void reorder_exons(Transcript * transcript) const;
 
+	/// Checks whether any adjacent exons are out of order
+	/// Assumes exons are in increasing order (to be correct)
+	bool has_incorrect_order_exons(const vector<Exon> & exons) const;
+
         /// Checks whether any adjacent exons overlap.
+	/// Assumes exons are in increasing order
         bool has_overlapping_exons(const vector<Exon> & exons) const;
 
         /// Constructs edited reference transcript paths from a set of 

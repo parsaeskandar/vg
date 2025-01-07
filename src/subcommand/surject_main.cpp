@@ -28,7 +28,7 @@
 
 using namespace std;
 using namespace vg;
-using namespace vg::subcommand;
+using namespace vg::subcommand; 
 
 void help_surject(char** argv) {
     cerr << "usage: " << argv[0] << " surject [options] <aln.gam> >[proj.cram]" << endl
@@ -47,8 +47,9 @@ void help_surject(char** argv) {
          << "  -b, --bam-output         write BAM to stdout" << endl
          << "  -s, --sam-output         write SAM to stdout" << endl
          << "  -l, --subpath-local      let the multipath mapping surjection produce local (rather than global) alignments" << endl
+         << "  -T, --max-tail-len N     only align up to N bases of read tails (default: 10000)" << endl
          << "  -P, --prune-low-cplx     prune short and low complexity anchors during realignment" << endl
-         << "  -a, --max-anchors N      use no more than N anchors per target path (default: 200)" << endl
+         << "  -a, --max-anchors N      use no more than N anchors per target path (default: unlimited)" << endl
          << "  -S, --spliced            interpret long deletions against paths as spliced alignments" << endl
          << "  -A, --qual-adj           adjust scoring for base qualities, if they are available" << endl
          << "  -N, --sample NAME        set this sample name for all reads" << endl
@@ -75,6 +76,27 @@ static void ensure_alignment_is_for_graph(const Alignment& aln, const HandleGrap
     }
 }
 
+/// If the given multipath alignment doesn't make sense against the given graph (i.e.
+/// doesn't agree with the nodes in the graph), print a message and stop the
+/// program. Is thread-safe.
+static void ensure_alignment_is_for_graph(const MultipathAlignment& aln, const HandleGraph& graph) {
+    // For multipaht alignments we just check node existence.
+    for (auto& subpath : aln.subpath()) {
+        for (auto& mapping : subpath.path().mapping()) {
+            nid_t node_id = mapping.position().node_id();
+            if (!graph.has_node(node_id)) {
+                // Something is wrong with this alignment.
+                #pragma omp critical (cerr)
+                {
+                    std::cerr << "error:[vg surject] MultipathAlignment " << aln.name() << " cannot be interpreted against this graph: node " << node_id << " does not exist!" << std::endl;
+                    std::cerr << "Make sure that you are using the same graph that the reads were mapped to!" << std::endl;
+                }
+                exit(1);
+            }
+        }
+    }
+}
+
 int main_surject(int argc, char** argv) {
     
     if (argc == 2) {
@@ -96,9 +118,10 @@ int main_surject(int argc, char** argv) {
     int min_splice_length = 20;
     size_t watchdog_timeout = 10;
     bool subpath_global = true; // force full length alignments in mpmap resolution
+    size_t max_tail_len = 10000;
     bool qual_adj = false;
     bool prune_anchors = false;
-    size_t max_anchors = 200;
+    size_t max_anchors = std::numeric_limits<size_t>::max(); // As close to unlimited as makes no difference
     bool annotate_with_all_path_scores = false;
     bool multimap = false;
     bool validate = true;
@@ -114,7 +137,8 @@ int main_surject(int argc, char** argv) {
             {"into-path", required_argument, 0, 'p'},
             {"into-paths", required_argument, 0, 'F'},
             {"ref-paths", required_argument, 0, 'F'}, // Now an alias for --into-paths
-            {"subpath-local", required_argument, 0, 'l'},
+            {"subpath-local", no_argument, 0, 'l'},
+            {"max-tail-len", required_argument, 0, 'T'},
             {"interleaved", no_argument, 0, 'i'},
             {"multimap", no_argument, 0, 'M'},
             {"gaf-input", no_argument, 0, 'G'},
@@ -137,7 +161,7 @@ int main_surject(int argc, char** argv) {
         };
 
         int option_index = 0;
-        c = getopt_long (argc, argv, "hx:p:F:liGmcbsN:R:f:C:t:SPa:ALMVw:",
+        c = getopt_long (argc, argv, "hx:p:F:lT:iGmcbsN:R:f:C:t:SPa:ALMVw:",
                 long_options, &option_index);
 
         // Detect the end of the options.
@@ -161,6 +185,10 @@ int main_surject(int argc, char** argv) {
         
         case 'l':
             subpath_global = false;
+            break;
+
+        case 'T':
+            max_tail_len = parse<size_t>(optarg);
             break;
 
         case 'i':
@@ -251,6 +279,14 @@ int main_surject(int argc, char** argv) {
         }
     }
 
+    string file_name = get_input_file_name(optind, argc, argv);
+
+    if (have_input_file(optind, argc, argv)) {
+        // We only take one input file.
+        cerr << "error[vg surject] Extra argument provided: " << get_input_file_name(optind, argc, argv, false) << endl;
+        exit(1);
+    }
+
     // Create a preprocessor to apply read group and sample name overrides in place
     auto set_metadata = [&](Alignment& update) {
         if (!sample_name.empty()) {
@@ -261,8 +297,6 @@ int main_surject(int argc, char** argv) {
         }
     };
 
-    string file_name = get_input_file_name(optind, argc, argv);
-    
     PathPositionHandleGraph* xgidx = nullptr;
     unique_ptr<PathHandleGraph> path_handle_graph;
     // If we add an overlay for path position queries, use one optimized for
@@ -303,8 +337,10 @@ int main_surject(int argc, char** argv) {
     else {
         surjector.min_splice_length = numeric_limits<int64_t>::max();
     }
+    surjector.max_tail_length = max_tail_len;
     surjector.annotate_with_all_path_scores = annotate_with_all_path_scores;
-    
+    surjector.choose_band_padding = algorithms::pad_band_min_random_walk(1.0, 2000, 16);
+
     // Count our threads
     int thread_count = vg::get_thread_count();
     
@@ -539,6 +575,11 @@ int main_surject(int argc, char** argv) {
                             
                             exit(1);
                         }
+
+                        if (validate) {
+                            ensure_alignment_is_for_graph(src1, *xgidx);
+                            ensure_alignment_is_for_graph(src2, *xgidx);
+                        }
                         
                         // convert out of protobuf
                         multipath_alignment_t mp_src1, mp_src2;
@@ -644,6 +685,10 @@ int main_surject(int argc, char** argv) {
                         size_t thread_num = omp_get_thread_num();
                         if (watchdog) {
                             watchdog->check_in(thread_num, src.name());
+                        }
+
+                        if (validate) {
+                            ensure_alignment_is_for_graph(src, *xgidx);
                         }
 
                         multipath_alignment_t mp_src;

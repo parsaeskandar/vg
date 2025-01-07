@@ -15,6 +15,7 @@
 #include <htslib/vcf.h>
 #include "handle.hpp"
 #include "vg/io/alignment_io.hpp"
+#include <vg/io/alignment_emitter.hpp>
 
 namespace vg {
 
@@ -26,37 +27,42 @@ int hts_for_each(string& filename, function<void(Alignment&)> lambda,
                  const PathPositionHandleGraph* graph);
 int hts_for_each_parallel(string& filename, function<void(Alignment&)> lambda,
                           const PathPositionHandleGraph* graph);
-int fastq_for_each(string& filename, function<void(Alignment&)> lambda);
 
-// fastq
-bool get_next_alignment_from_fastq(gzFile fp, char* buffer, size_t len, Alignment& alignment);
-bool get_next_interleaved_alignment_pair_from_fastq(gzFile fp, char* buffer, size_t len, Alignment& mate1, Alignment& mate2);
-bool get_next_alignment_pair_from_fastqs(gzFile fp1, gzFile fp2, char* buffer, size_t len, Alignment& mate1, Alignment& mate2);
+// parsing a FASTQ record, optionally intepreting the comment as SAM-style tags
+bool get_next_alignment_from_fastq(gzFile fp, char* buffer, size_t len, Alignment& alignment, bool comment_as_tags);
+bool get_next_interleaved_alignment_pair_from_fastq(gzFile fp, char* buffer, size_t len, Alignment& mate1, Alignment& mate2, bool comment_as_tags);
+bool get_next_alignment_pair_from_fastqs(gzFile fp1, gzFile fp2, char* buffer, size_t len, Alignment& mate1, Alignment& mate2, bool comment_as_tags);
 
-size_t fastq_unpaired_for_each(const string& filename, function<void(Alignment&)> lambda);
-size_t fastq_paired_interleaved_for_each(const string& filename, function<void(Alignment&, Alignment&)> lambda);
-size_t fastq_paired_two_files_for_each(const string& file1, const string& file2, function<void(Alignment&, Alignment&)> lambda);
+// parsing a FASTQ or FASTA file, optionally interpreting comments as SAM-style tags
+size_t fastq_unpaired_for_each(const string& filename, function<void(Alignment&)> lambda, bool comment_as_tags = false);
+size_t fastq_paired_interleaved_for_each(const string& filename, function<void(Alignment&, Alignment&)> lambda, bool comment_as_tags = false);
+size_t fastq_paired_two_files_for_each(const string& file1, const string& file2, function<void(Alignment&, Alignment&)> lambda, bool comment_as_tags = false);
 // parallel versions of above
 size_t fastq_unpaired_for_each_parallel(const string& filename,
                                         function<void(Alignment&)> lambda,
+                                        bool comment_as_tags = false,
                                         uint64_t batch_size = vg::io::DEFAULT_PARALLEL_BATCHSIZE);
     
 size_t fastq_paired_interleaved_for_each_parallel(const string& filename,
                                                   function<void(Alignment&, Alignment&)> lambda,
+                                                  bool comment_as_tags = false,
                                                   uint64_t batch_size = vg::io::DEFAULT_PARALLEL_BATCHSIZE);
     
 size_t fastq_paired_interleaved_for_each_parallel_after_wait(const string& filename,
                                                              function<void(Alignment&, Alignment&)> lambda,
                                                              function<bool(void)> single_threaded_until_true,
+                                                             bool comment_as_tags = false,
                                                              uint64_t batch_size = vg::io::DEFAULT_PARALLEL_BATCHSIZE);
     
 size_t fastq_paired_two_files_for_each_parallel(const string& file1, const string& file2,
                                                 function<void(Alignment&, Alignment&)> lambda,
+                                                bool comment_as_tags = false,
                                                 uint64_t batch_size = vg::io::DEFAULT_PARALLEL_BATCHSIZE);
     
 size_t fastq_paired_two_files_for_each_parallel_after_wait(const string& file1, const string& file2,
                                                            function<void(Alignment&, Alignment&)> lambda,
                                                            function<bool(void)> single_threaded_until_true,
+                                                           bool comment_as_tags = false,
                                                            uint64_t batch_size = vg::io::DEFAULT_PARALLEL_BATCHSIZE);
 
 bam_hdr_t* hts_file_header(string& filename, string& header);
@@ -293,10 +299,19 @@ void normalize_alignment(Alignment& alignment);
 // quality information; a kind of poor man's pileup
 map<id_t, int> alignment_quality_per_node(const Alignment& aln);
 
-/// Parse regions from the given BED file into Alignments in a vector.
+/// Parse regions from the given BED file and call the given callback with each.
+/// Does *not* write them to standard output.
 /// Reads the optional name, is_reverse, and score fields if present, and populates the relevant Alignment fields.
 /// Skips and warns about malformed or illegal BED records.
+void parse_bed_regions(istream& bedstream, const PathPositionHandleGraph* graph, const std::function<void(Alignment&)>& callback);
+/// Parse regions from the given GFF file and call the given callback with each.
+/// Does *not* write them to standard output.
+void parse_gff_regions(istream& gtfstream, const PathPositionHandleGraph* graph, const std::function<void(Alignment&)>& callback);
+/// Parse regions from the given BED file into the given vector.
+/// Does *not* write them to standard output.
 void parse_bed_regions(istream& bedstream, const PathPositionHandleGraph* graph, vector<Alignment>* out_alignments);
+/// Parse regions from the given GFF file into the given vector.
+/// Does *not* write them to standard output.
 void parse_gff_regions(istream& gtfstream, const PathPositionHandleGraph* graph, vector<Alignment>* out_alignments);
 
 Position alignment_start(const Alignment& aln);
@@ -318,7 +333,8 @@ struct AlignmentValidity {
     enum Problem {
         OK,
         NODE_MISSING,
-        NODE_TOO_SHORT
+        NODE_TOO_SHORT,
+        SEQ_DOES_NOT_MATCH
     };
     
     /// The kind of problem with the alignment.
@@ -337,7 +353,7 @@ struct AlignmentValidity {
 /// Check to make sure edits on the alignment's path don't assume incorrect
 /// node lengths or ids. Result can be used like a bool or inspected for
 /// further details. Does not log anything itself about bad alignments.
-AlignmentValidity alignment_is_valid(const Alignment& aln, const HandleGraph* hgraph);
+AlignmentValidity alignment_is_valid(const Alignment& aln, const HandleGraph* hgraph, bool check_sequence = false);
     
 /// Make an Alignment corresponding to a subregion of a stored path.
 /// Positions are 0-based, and pos2 is excluded.

@@ -390,7 +390,8 @@ void help_giraffe(char** argv, const BaseOptionGroup& parser, bool full_help) {
     << "input options:" << endl
     << "  -G, --gam-in FILE             read and realign GAM-format reads from FILE" << endl
     << "  -f, --fastq-in FILE           read and align FASTQ-format reads from FILE (two are allowed, one for each mate)" << endl
-    << "  -i, --interleaved             GAM/FASTQ input is interleaved pairs, for paired-end alignment" << endl;
+    << "  -i, --interleaved             GAM/FASTQ input is interleaved pairs, for paired-end alignment" << endl
+    << "  --comments-as-tags            intepret comments in name lines as SAM-style tags and annotate alignments with them" << endl;
 
     cerr
     << "haplotype sampling:" << endl
@@ -464,6 +465,7 @@ int main_giraffe(int argc, char** argv) {
     constexpr int OPT_HAPLOTYPE_NAME = 1100;
     constexpr int OPT_KFF_NAME = 1101;
     constexpr int OPT_INDEX_BASENAME = 1102;
+    constexpr int OPT_COMMENTS_AS_TAGS = 1103;
 
     // initialize parameters with their default options
     
@@ -497,8 +499,10 @@ int main_giraffe(int argc, char** argv) {
     bool interleaved = false;
     // True if fastq_filename_2 or interleaved is set.
     bool paired = false;
+    // True if the FASTQ's name line comments are SAM-style tags that we want to preserve
+    bool comments_as_tags = false;
     string param_preset = "default";
-    //Attempt up to this many rescues of reads with no pairs
+    // Attempt up to this many rescues of reads with no pairs
     bool forced_rescue_attempts = false;
     // Which rescue algorithm do we use?
     MinimizerMapper::RescueAlgorithm rescue_algorithm = MinimizerMapper::rescue_dozeu;
@@ -592,6 +596,7 @@ int main_giraffe(int argc, char** argv) {
         {"gam-in", required_argument, 0, 'G'},
         {"fastq-in", required_argument, 0, 'f'},
         {"interleaved", no_argument, 0, 'i'},
+        {"comments-as-tags", no_argument, 0, OPT_COMMENTS_AS_TAGS},
         {"max-multimaps", required_argument, 0, 'M'},
         {"sample", required_argument, 0, 'N'},
         {"read-group", required_argument, 0, 'R'},
@@ -602,7 +607,7 @@ int main_giraffe(int argc, char** argv) {
         {"discard", no_argument, 0, 'n'},
         {"output-basename", required_argument, 0, OPT_OUTPUT_BASENAME},
         {"report-name", required_argument, 0, OPT_REPORT_NAME},
-        {"fast-mode", no_argument, 0, 'b'},
+        {"parameter-preset", required_argument, 0, 'b'},
         {"rescue-algorithm", required_argument, 0, 'A'},
         {"fragment-mean", required_argument, 0, OPT_FRAGMENT_MEAN },
         {"fragment-stdev", required_argument, 0, OPT_FRAGMENT_STDEV },
@@ -773,6 +778,10 @@ int main_giraffe(int argc, char** argv) {
             case 'i':
                 interleaved = true;
                 paired = true;
+                break;
+                
+            case OPT_COMMENTS_AS_TAGS:
+                comments_as_tags = true;
                 break;
                 
             case 'N':
@@ -1462,12 +1471,12 @@ int main_giraffe(int argc, char** argv) {
                     });
                 } else if (!fastq_filename_2.empty()) {
                     //A pair of FASTQ files to map
-                    fastq_paired_two_files_for_each_parallel_after_wait(fastq_filename_1, fastq_filename_2, map_read_pair, distribution_is_ready, batch_size);
+                    fastq_paired_two_files_for_each_parallel_after_wait(fastq_filename_1, fastq_filename_2, map_read_pair, distribution_is_ready, comments_as_tags, batch_size);
 
 
                 } else if ( !fastq_filename_1.empty()) {
                     // An interleaved FASTQ file to map, map all its pairs in parallel.
-                    fastq_paired_interleaved_for_each_parallel_after_wait(fastq_filename_1, map_read_pair, distribution_is_ready, batch_size);
+                    fastq_paired_interleaved_for_each_parallel_after_wait(fastq_filename_1, map_read_pair, distribution_is_ready, comments_as_tags, batch_size);
                 }
 
                 // Now map all the ambiguous pairs
@@ -1535,7 +1544,7 @@ int main_giraffe(int argc, char** argv) {
                 
                 if (!fastq_filename_1.empty()) {
                     // FASTQ file to map, map all its reads in parallel.
-                    fastq_unpaired_for_each_parallel(fastq_filename_1, map_read, batch_size);
+                    fastq_unpaired_for_each_parallel(fastq_filename_1, map_read, comments_as_tags, batch_size);
                 }
             }
         
@@ -1669,14 +1678,11 @@ string sample_haplotypes(const vector<pair<string, string>>& indexes, string& ba
 
     // Sample haplotypes.
     Haplotypes::Verbosity verbosity = (progress ? Haplotypes::verbosity_basic : Haplotypes::verbosity_silent);
-    Recombinator recombinator(gbz, verbosity);
-    Recombinator::Parameters parameters;
-    parameters.num_haplotypes = Recombinator::NUM_CANDIDATES;
-    parameters.diploid_sampling = true;
-    parameters.include_reference = true;
+    Recombinator recombinator(gbz, haplotypes, verbosity);
+    Recombinator::Parameters parameters(Recombinator::Parameters::preset_diploid);
     gbwt::GBWT sampled_gbwt;
     try {
-        sampled_gbwt = recombinator.generate_haplotypes(haplotypes, kff_file, parameters);
+        sampled_gbwt = recombinator.generate_haplotypes(kff_file, parameters);
     } catch (const std::runtime_error& e) {
         std::cerr << "error:[vg giraffe] Haplotype sampling failed: " << e.what() << std::endl;
         std::exit(EXIT_FAILURE);
